@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { ArrowLeft, Download, Trash2, Languages, Calendar } from 'lucide-react';
+import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List } from 'lucide-react';
 import Link from 'next/link';
 
 interface SubtitleProject {
@@ -18,6 +18,7 @@ interface SubtitleProject {
 export default function HistoryPage() {
   const [projects, setProjects] = useState<SubtitleProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [previewProject, setPreviewProject] = useState<SubtitleProject | null>(null);
 
   const fetchHistory = async () => {
     try {
@@ -166,8 +167,14 @@ export default function HistoryPage() {
                       : '날짜 정보 없음'}
                   </div>
 
-                  <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-600 mb-5 border border-gray-100 h-20 overflow-hidden relative">
-                    <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-gray-50 to-transparent"></div>
+                  <div 
+                    onClick={() => setPreviewProject(project)}
+                    className="bg-gray-50 p-3 rounded-lg text-sm text-gray-600 mb-5 border border-gray-200 h-20 overflow-hidden relative cursor-pointer hover:bg-gray-100 hover:border-blue-300 transition-colors group"
+                    title="전체 자막 미리보기"
+                  >
+                    <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-gray-50 group-hover:from-gray-100 to-transparent flex items-end justify-center pb-1">
+                      <span className="text-[10px] font-bold text-blue-500 bg-white/80 px-2 py-0.5 rounded-full shadow-sm">전체 보기 클릭</span>
+                    </div>
                     <span className="font-semibold text-gray-700">미리보기: </span>
                     {project.translatedSubtitles?.[0]?.text || '번역 내용 없음...'}
                   </div>
@@ -218,6 +225,61 @@ export default function HistoryPage() {
           </div>
         )}
       </main>
+
+      {/* 미리보기 모달 */}
+      {previewProject && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+              <div className="flex items-center gap-3">
+                <List className="text-blue-600" size={24} />
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800 line-clamp-1">{previewProject.title}</h2>
+                  <p className="text-xs text-gray-500">{langMap[previewProject.targetLang] || previewProject.targetLang} 번역</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setPreviewProject(null)} 
+                className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-auto p-0 bg-gray-50">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 bg-white shadow-sm z-10 text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-4 py-3 border-b border-gray-200 font-semibold w-32 text-center">타임스탬프</th>
+                    <th className="px-4 py-3 border-b border-gray-200 font-semibold w-1/2">원본 자막</th>
+                    <th className="px-4 py-3 border-b border-gray-200 font-semibold w-1/2 text-blue-600">번역 자막</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {previewProject.originalSubtitles?.map((origSub, idx) => {
+                    const transSub = previewProject.translatedSubtitles?.[idx] || { text: '' };
+                    return (
+                      <tr key={origSub.id || idx} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 text-xs font-mono text-gray-400 text-center whitespace-nowrap align-top pt-4">
+                          {origSub.start}
+                          <br/><span className="text-[10px] text-gray-300">|</span><br/>
+                          {origSub.end}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 leading-relaxed align-top">
+                          {origSub.text}
+                        </td>
+                        <td className="px-4 py-3 text-[15px] font-medium text-gray-900 leading-relaxed align-top bg-blue-50/30">
+                          {transSub.text}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
