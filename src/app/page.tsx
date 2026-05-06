@@ -19,6 +19,13 @@ const formatTime = (seconds: number) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
+const parseMs = (timeStr: string) => {
+  const parts = timeStr.split(':').map(Number);
+  if (parts.length === 2) return (parts[0] * 60 + parts[1]) * 1000;
+  if (parts.length === 3) return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+  return 0;
+};
+
 export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [originalSubtitles, setOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
@@ -38,6 +45,11 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [activeSubtitleId, setActiveSubtitleId] = useState<number | null>(null);
+  
+  // 스크롤 동기화를 위한 ref
+  const originalListRef = useRef<HTMLDivElement>(null);
+  const translatedListRef = useRef<HTMLDivElement>(null);
   
   // 실시간 캡션 관련 상태
   const [isLiveMode, setIsLiveMode] = useState(false);
@@ -167,6 +179,12 @@ export default function Home() {
     }
   };
 
+  const handleOriginalSubtitleEdit = (id: number, newText: string) => {
+    setOriginalSubtitles(prev => prev.map(sub => 
+      sub.id === id ? { ...sub, text: newText } : sub
+    ));
+  };
+
   const handleSubtitleEdit = (id: number, newText: string) => {
     setTranslatedSubtitles(prev => prev.map(sub => 
       sub.id === id ? { ...sub, text: newText } : sub
@@ -241,14 +259,6 @@ export default function Home() {
     let smiContent = `<SAMI>\n<HEAD>\n<TITLE>SubEdit Subtitles</TITLE>\n<STYLE TYPE="text/css">\n<!--\nP { font-family: Arial; font-size: 14pt; text-align: center; color: #FFFFFF; }\n.TRANS { Name: Translated; lang: ${targetLang}; SAMIType: CC; }\n-->\n</STYLE>\n</HEAD>\n<BODY>\n`;
 
     translatedSubtitles.forEach((sub) => {
-      // 시간 파싱 (HH:MM:SS 또는 MM:SS -> 밀리초 변환)
-      const parseMs = (timeStr: string) => {
-        const parts = timeStr.split(':').map(Number);
-        if (parts.length === 2) return (parts[0] * 60 + parts[1]) * 1000;
-        if (parts.length === 3) return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
-        return 0;
-      };
-
       const msStart = parseMs(sub.start);
       const msEnd = parseMs(sub.end);
 
@@ -267,6 +277,38 @@ export default function Home() {
     link.click();
     document.body.removeChild(link);
   };
+
+  // 비디오 시간 업데이트 감지 및 자막 싱크 맞춤
+  const handleTimeUpdate = () => {
+    if (!videoRef.current) return;
+    const currentMs = videoRef.current.currentTime * 1000;
+    
+    const activeSub = originalSubtitles.find(sub => {
+      const startMs = parseMs(sub.start);
+      const endMs = parseMs(sub.end);
+      return currentMs >= startMs && currentMs <= endMs;
+    });
+
+    if (activeSub && activeSub.id !== activeSubtitleId) {
+      setActiveSubtitleId(activeSub.id);
+    } else if (!activeSub && activeSubtitleId !== null) {
+      setActiveSubtitleId(null);
+    }
+  };
+
+  // 활성화된 자막으로 자동 스크롤
+  useEffect(() => {
+    if (activeSubtitleId !== null) {
+      const origEl = document.getElementById(`orig-${activeSubtitleId}`);
+      if (origEl && originalListRef.current) {
+        origEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      const transEl = document.getElementById(`trans-${activeSubtitleId}`);
+      if (transEl && translatedListRef.current) {
+        transEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [activeSubtitleId]);
 
   // 실시간 캡션 제어 로직
   const toggleLiveCaption = () => {
@@ -388,40 +430,56 @@ export default function Home() {
       </header>
 
       {/* Main Workspace (Split Pane) */}
-      <main className="flex flex-1 overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden">
         
-        {/* Left Pane: Video & Original Subtitles */}
-        <section className="flex flex-col w-1/2 border-r border-gray-200 bg-white">
-          {/* Video Player Area */}
-          <div className="relative w-full aspect-video bg-black flex flex-col items-center justify-center group">
-            {videoSrc ? (
+        {/* Top Pane: Video Player */}
+        <section className="flex-none h-[40vh] bg-[#1a1b26] border-b border-gray-300 relative flex flex-col items-center justify-center p-4">
+          {!videoSrc ? (
+            <div className="w-full h-full border-2 border-dashed border-gray-600 rounded-xl flex flex-col items-center justify-center bg-gray-800/30">
+              <Upload size={48} className="text-gray-500 mb-4" />
+              <p className="text-gray-400 font-medium mb-2">편집할 영상 파일을 업로드하세요 (MP4, WebM)</p>
+              <input 
+                type="file" 
+                accept="video/*" 
+                className="hidden" 
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center gap-2 mt-2"
+              >
+                {isProcessing ? <Loader2 size={18} className="animate-spin" /> : null}
+                {isProcessing ? '처리 중...' : '영상 업로드'}
+              </button>
+            </div>
+          ) : (
+            <div className="relative w-full h-full flex items-center justify-center group bg-black rounded-lg overflow-hidden shadow-inner">
               <video 
                 ref={videoRef}
-                src={videoSrc} 
-                className="w-full h-full object-contain"
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
+                src={videoSrc}
+                className="max-h-full max-w-full object-contain"
+                controls
+                onTimeUpdate={handleTimeUpdate}
               />
-            ) : (
-              <p className="text-gray-400">우측 상단의 '영상 업로드'를 통해 비디오를 추가해주세요</p>
-            )}
-            
-            {/* Playback Controls */}
-            {videoSrc && (
-              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-4">
-                <button onClick={togglePlay} className="text-white hover:text-blue-400 focus:outline-none">
-                  {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
-                </button>
-                <div className="flex-1 h-1.5 bg-gray-600 rounded-full overflow-hidden cursor-pointer">
-                  <div className="w-0 h-full bg-blue-500"></div>
-                </div>
-                <span className="text-white text-xs font-mono">00:00:00</span>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Original Subtitles List */}
-          <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Processing Overlay */}
+          {isProcessing && (
+            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
+              <Loader2 size={40} className="text-blue-500 animate-spin mb-4" />
+              <div className="text-blue-400 font-bold tracking-wide">{progressMsg}</div>
+            </div>
+          )}
+        </section>
+
+        {/* Bottom Pane: Split Subtitles */}
+        <section className="flex-1 flex overflow-hidden bg-gray-50">
+          
+          {/* Left Pane: Original Subtitles */}
+          <div className="flex flex-col w-1/2 border-r border-gray-200 bg-white shadow-sm z-0">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
               <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500"></span>
@@ -429,98 +487,115 @@ export default function Home() {
               </h2>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={originalListRef}>
               {originalSubtitles.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-sm text-gray-400">
                   영상을 업로드하면 AI가 자막을 생성합니다.
                 </div>
               ) : (
-                originalSubtitles.map((sub) => (
-                  <div key={sub.id} className="flex gap-4 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-sm transition-all bg-white group cursor-pointer">
-                    <div className="flex flex-col items-center justify-start pt-1 text-xs font-mono text-gray-500 gap-1 w-12 shrink-0">
-                      <span>{sub.start}</span>
-                      <span className="text-gray-300 leading-none">|</span>
-                      <span>{sub.end}</span>
+                originalSubtitles.map((sub) => {
+                  const isActive = sub.id === activeSubtitleId;
+                  return (
+                    <div 
+                      key={sub.id} 
+                      id={`orig-${sub.id}`}
+                      className={`flex gap-4 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-blue-400
+                        ${isActive ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-transparent hover:border-gray-200'}`}
+                    >
+                      <div className={`flex flex-col items-center justify-start pt-1 text-xs font-mono gap-1 w-12 shrink-0 ${isActive ? 'text-blue-600 font-bold' : 'text-gray-400 opacity-50'}`}>
+                        <span>{sub.start}</span>
+                      </div>
+                      <textarea 
+                        className={`flex-1 w-full bg-transparent resize-none outline-none text-[15px] leading-relaxed min-h-[44px] ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}`}
+                        value={sub.text}
+                        onChange={(e) => handleOriginalSubtitleEdit(sub.id, e.target.value)}
+                        rows={2}
+                      />
                     </div>
-                    <div className="flex-1 text-gray-800 text-[15px] leading-relaxed">
-                      {sub.text}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
-        </section>
 
-        {/* Right Pane: Translation Editor */}
-        <section className="flex flex-col w-1/2 bg-gray-50">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center gap-3">
-              <Languages size={18} className="text-blue-600" />
-              <select 
-                value={targetLang}
-                onChange={(e) => setTargetLang(e.target.value)}
-                className="text-sm font-bold text-gray-800 bg-transparent outline-none cursor-pointer border-b border-dashed border-gray-400 pb-0.5"
-              >
-                <option value="en">영어 (English)</option>
-                <option value="zh">중국어 (中文)</option>
-                <option value="ja">일본어 (日本語)</option>
-                <option value="vi">베트남어 (Tiếng Việt)</option>
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={handleTranslate}
-                disabled={isTranslating}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isTranslating ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'}`}
-              >
-                {isTranslating && <Loader2 size={14} className="animate-spin" />}
-                {isTranslating ? '번역 중...' : 'AI 전체 번역'}
-              </button>
-              <div className="w-px h-4 bg-gray-300 mx-1" />
-              <button 
-                onClick={handleSaveToHistory}
-                disabled={isSaving}
-                className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isSaving ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-white bg-gray-800 border-gray-800 hover:bg-gray-700'}`}
-              >
-                {isSaving ? '저장 중...' : '작업 저장'}
-              </button>
-              <button 
-                onClick={downloadSRT}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-              >
-                <Download size={14} /> .SRT
-              </button>
-              <button 
-                onClick={downloadSMI}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-              >
-                <Download size={14} /> .SMI
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {translatedSubtitles.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-gray-400 flex-col gap-2">
-                <Languages size={32} className="text-gray-300 mb-2" />
-                <p>원본 자막을 생성한 뒤 'AI 전체 번역' 버튼을 눌러주세요.</p>
+          {/* Right Pane: Translation Editor */}
+          <div className="flex flex-col w-1/2 bg-white z-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Languages size={18} className="text-blue-600" />
+                <select 
+                  value={targetLang}
+                  onChange={(e) => setTargetLang(e.target.value)}
+                  className="text-sm font-bold text-gray-800 bg-transparent outline-none cursor-pointer border-b border-dashed border-gray-400 pb-0.5"
+                >
+                  <option value="en">영어 (English)</option>
+                  <option value="zh">중국어 (中文)</option>
+                  <option value="ja">일본어 (日本語)</option>
+                  <option value="vi">베트남어 (Tiếng Việt)</option>
+                </select>
               </div>
-            ) : (
-              translatedSubtitles.map((sub) => (
-                <div key={sub.id} className="flex gap-4 p-3 rounded-lg border border-transparent hover:border-gray-200 bg-white shadow-sm focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-transparent transition-all">
-                  <div className="flex flex-col items-center justify-start pt-1 text-xs font-mono text-gray-400 w-12 shrink-0 opacity-50">
-                    {sub.start}
-                  </div>
-                  <textarea 
-                    className="flex-1 w-full bg-transparent resize-none outline-none text-gray-800 text-[15px] leading-relaxed min-h-[44px]"
-                    value={sub.text}
-                    onChange={(e) => handleSubtitleEdit(sub.id, e.target.value)}
-                    rows={2}
-                  />
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleTranslate}
+                  disabled={isTranslating}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isTranslating ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'}`}
+                >
+                  {isTranslating && <Loader2 size={14} className="animate-spin" />}
+                  {isTranslating ? '번역 중...' : 'AI 전체 번역'}
+                </button>
+                <div className="w-px h-4 bg-gray-300 mx-1" />
+                <button 
+                  onClick={handleSaveToHistory}
+                  disabled={isSaving}
+                  className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isSaving ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-white bg-gray-800 border-gray-800 hover:bg-gray-700'}`}
+                >
+                  {isSaving ? '저장 중...' : '작업 저장'}
+                </button>
+                <button 
+                  onClick={downloadSRT}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                >
+                  <Download size={14} /> .SRT
+                </button>
+                <button 
+                  onClick={downloadSMI}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                >
+                  <Download size={14} /> .SMI
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={translatedListRef}>
+              {translatedSubtitles.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-gray-400 flex-col gap-2">
+                  <Languages size={32} className="text-gray-300 mb-2" />
+                  <p>원본 자막을 생성한 뒤 'AI 전체 번역' 버튼을 눌러주세요.</p>
                 </div>
-              ))
-            )}
+              ) : (
+                translatedSubtitles.map((sub) => {
+                  const isActive = sub.id === activeSubtitleId;
+                  return (
+                    <div 
+                      key={sub.id} 
+                      id={`trans-${sub.id}`}
+                      className={`flex gap-4 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-blue-400
+                        ${isActive ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-transparent hover:border-gray-200'}`}
+                    >
+                      <div className={`flex flex-col items-center justify-start pt-1 text-xs font-mono gap-1 w-12 shrink-0 ${isActive ? 'text-blue-600 font-bold' : 'text-gray-400 opacity-50'}`}>
+                        <span>{sub.start}</span>
+                      </div>
+                      <textarea 
+                        className={`flex-1 w-full bg-transparent resize-none outline-none text-[15px] leading-relaxed min-h-[44px] ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}`}
+                        value={sub.text}
+                        onChange={(e) => handleSubtitleEdit(sub.id, e.target.value)}
+                        rows={2}
+                      />
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </section>
 
