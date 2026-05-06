@@ -41,6 +41,7 @@ export default function Home() {
   }, [targetLang]);
 
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translateProgressMsg, setTranslateProgressMsg] = useState('AI 전체 번역');
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
@@ -85,9 +86,17 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // 1. 영상 미리보기 설정
+    // 1. 영상 미리보기 및 길이 측정 설정
     const objectUrl = URL.createObjectURL(file);
     setVideoSrc(objectUrl);
+
+    // 비디오 길이를 구하기 위해 임시 엘리먼트 사용
+    const videoEl = document.createElement('video');
+    videoEl.src = objectUrl;
+    await new Promise((resolve) => {
+      videoEl.onloadedmetadata = () => resolve(videoEl.duration);
+    });
+    const duration = videoEl.duration;
 
     // 2. FFmpeg로 오디오 추출 시작
     setIsProcessing(true);
@@ -98,42 +107,62 @@ export default function Home() {
       setProgressMsg('영상 로드 중...');
       await ffmpeg.writeFile('input.mp4', await fetchFile(file));
       
-      setProgressMsg('오디오 추출 중... (약 10~30초 소요)');
-      // -vn: 비디오 제외, -ac 1: 모노 오디오, -ar 16000: 16kHz 샘플링, -b:a 64k: 비트레이트 제한 -> Whisper 최적화
-      await ffmpeg.exec(['-i', 'input.mp4', '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', 'output.mp3']);
-      
-      setProgressMsg('오디오 파일 완성 중...');
-      const data = await ffmpeg.readFile('output.mp3');
-      const audioBlob = new Blob([data as any], { type: 'audio/mp3' });
-      
-      // 추출된 오디오 파일 확인 (개발용)
-      console.log('추출된 오디오 크기:', (audioBlob.size / 1024 / 1024).toFixed(2), 'MB');
-      
-      setProgressMsg('서버로 음성 전송 중... (AI 자막 생성)');
-      
-      // FormData 생성 및 API 호출
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.mp3');
-      
-      const response = await fetch('/api/whisper', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'API 요청 실패');
-      }
+      // 분할 처리 (Chunking) 10분(600초) 단위
+      const CHUNK_SIZE = 10 * 60;
+      const totalChunks = Math.ceil(duration / CHUNK_SIZE);
+      let allSegments: any[] = [];
+      let globalSegmentId = 0;
 
-      // 원본 자막 상태 업데이트
-      if (result.segments && result.segments.length > 0) {
-        const formattedSegments = result.segments.map((seg: any, idx: number) => ({
-          id: seg.id || idx,
-          start: formatTime(seg.start),
-          end: formatTime(seg.end),
-          text: seg.text.trim(),
-        }));
-        setOriginalSubtitles(formattedSegments);
+      for (let i = 0; i < totalChunks; i++) {
+        const startSec = i * CHUNK_SIZE;
+        const currentChunkDuration = Math.min(CHUNK_SIZE, duration - startSec);
+        
+        setProgressMsg(`[${i + 1}/${totalChunks}] 조각 오디오 추출 중...`);
+        const chunkFileName = `chunk_${i}.mp3`;
+        await ffmpeg.exec([
+          '-ss', String(startSec), 
+          '-t', String(currentChunkDuration), 
+          '-i', 'input.mp4', 
+          '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', 
+          chunkFileName
+        ]);
+        
+        setProgressMsg(`[${i + 1}/${totalChunks}] 조각 오디오 완성 중...`);
+        const data = await ffmpeg.readFile(chunkFileName);
+        const audioBlob = new Blob([data as any], { type: 'audio/mp3' });
+        
+        setProgressMsg(`[${i + 1}/${totalChunks}] 조각 서버 전송 중... (AI 자막 생성)`);
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'audio.mp3');
+        
+        const response = await fetch('/api/whisper', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || 'API 요청 실패');
+        }
+
+        if (result.segments && result.segments.length > 0) {
+          const formattedSegments = result.segments.map((seg: any) => {
+            const absoluteStart = seg.start + startSec;
+            const absoluteEnd = seg.end + startSec;
+            return {
+              id: globalSegmentId++,
+              start: formatTime(absoluteStart),
+              end: formatTime(absoluteEnd),
+              text: seg.text.trim(),
+            };
+          });
+          allSegments = [...allSegments, ...formattedSegments];
+          // 부분 자막이라도 실시간으로 화면에 업데이트하여 로딩 체감을 줄임
+          setOriginalSubtitles([...allSegments]);
+        }
+        
+        // 브라우저 메모리 관리를 위해 사용 끝난 파일 즉시 삭제
+        await ffmpeg.deleteFile(chunkFileName);
       }
       
       setProgressMsg('자막 생성 완료!');
@@ -153,27 +182,43 @@ export default function Home() {
     }
 
     setIsTranslating(true);
+    setTranslateProgressMsg('번역 준비 중...');
+    
     try {
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subtitles: originalSubtitles,
-          targetLanguage: targetLang,
-        }),
-      });
+      const CHUNK_SIZE = 50;
+      const totalChunks = Math.ceil(originalSubtitles.length / CHUNK_SIZE);
+      let translatedAcc: any[] = [];
 
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || '번역 요청 실패');
-      }
+      for (let i = 0; i < totalChunks; i++) {
+        setTranslateProgressMsg(`[${i + 1}/${totalChunks}] 번역 중...`);
+        const chunk = originalSubtitles.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subtitles: chunk,
+            targetLanguage: targetLang,
+          }),
+        });
 
-      if (result.translatedSubtitles) {
-        setTranslatedSubtitles(result.translatedSubtitles);
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || 'API 요청 실패');
+        }
+
+        if (result.translatedSubtitles) {
+          translatedAcc = [...translatedAcc, ...result.translatedSubtitles];
+          setTranslatedSubtitles([...translatedAcc]); // 실시간 화면 반영
+        }
       }
+      
+      setTranslateProgressMsg('번역 완료!');
+      setTimeout(() => setTranslateProgressMsg('AI 전체 번역'), 2000);
     } catch (err: any) {
       console.error(err);
-      alert('번역 중 오류가 발생했습니다: ' + (err.message || err));
+      alert('번역 중 오류가 발생했습니다: ' + err.message);
+      setTranslateProgressMsg('AI 전체 번역');
     } finally {
       setIsTranslating(false);
     }
@@ -492,7 +537,7 @@ export default function Home() {
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isTranslating ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'}`}
                 >
                   {isTranslating && <Loader2 size={14} className="animate-spin" />}
-                  {isTranslating ? '번역 중...' : 'AI 전체 번역'}
+                  {isTranslating ? translateProgressMsg : 'AI 전체 번역'}
                 </button>
                 <div className="w-px h-4 bg-gray-300 mx-1" />
                 <button 
