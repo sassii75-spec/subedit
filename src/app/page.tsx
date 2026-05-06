@@ -59,7 +59,7 @@ export default function Home() {
     setProgressMsg('FFmpeg 엔진 로딩 중...');
     const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
     
-    ffmpeg.on('log', ({ message }) => {
+    ffmpeg.on('log', ({ message }: { message: string }) => {
       console.log('FFmpeg:', message);
     });
 
@@ -92,7 +92,7 @@ export default function Home() {
       
       setProgressMsg('오디오 파일 완성 중...');
       const data = await ffmpeg.readFile('output.mp3');
-      const audioBlob = new Blob([(data as Uint8Array).buffer], { type: 'audio/mp3' });
+      const audioBlob = new Blob([data as any], { type: 'audio/mp3' });
       
       // 추출된 오디오 파일 확인 (개발용)
       console.log('추출된 오디오 크기:', (audioBlob.size / 1024 / 1024).toFixed(2), 'MB');
