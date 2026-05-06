@@ -74,9 +74,12 @@ export default function HistoryPage() {
     return `${mm}${dd}_${hh}${min}`;
   };
 
-  const downloadSRT = (project: SubtitleProject) => {
+  const downloadSRT = (project: SubtitleProject, isOriginal: boolean = false) => {
     let srtContent = '';
-    project.translatedSubtitles.forEach((sub, idx) => {
+    const targetSubtitles = isOriginal ? project.originalSubtitles : project.translatedSubtitles;
+    const langSuffix = isOriginal ? '원본' : project.targetLang;
+
+    targetSubtitles.forEach((sub, idx) => {
       srtContent += `${idx + 1}\n`;
       srtContent += `${formatSrtTime(sub.start)} --> ${formatSrtTime(sub.end)}\n`;
       srtContent += `${sub.text}\n\n`;
@@ -86,16 +89,20 @@ export default function HistoryPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.title}_${project.targetLang}_${getFormattedDate()}.srt`;
+    link.download = `${project.title}_${langSuffix}_${getFormattedDate()}.srt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const downloadSMI = (project: SubtitleProject) => {
-    let smiContent = `<SAMI>\n<HEAD>\n<TITLE>${project.title}</TITLE>\n<STYLE TYPE="text/css">\n<!--\nP { font-family: Arial; font-size: 14pt; text-align: center; color: #FFFFFF; }\n.TRANS { Name: Translated; lang: ${project.targetLang}; SAMIType: CC; }\n-->\n</STYLE>\n</HEAD>\n<BODY>\n`;
+  const downloadSMI = (project: SubtitleProject, isOriginal: boolean = false) => {
+    const targetSubtitles = isOriginal ? project.originalSubtitles : project.translatedSubtitles;
+    const langSuffix = isOriginal ? '원본' : project.targetLang;
+    const langCode = isOriginal ? 'ko' : project.targetLang; // 원본은 주로 한국어/다국어, 포맷용으로 ko 유지
 
-    project.translatedSubtitles.forEach((sub) => {
+    let smiContent = `<SAMI>\n<HEAD>\n<TITLE>${project.title}</TITLE>\n<STYLE TYPE="text/css">\n<!--\nP { font-family: Arial; font-size: 14pt; text-align: center; color: #FFFFFF; }\n.TRANS { Name: Subtitle; lang: ${langCode}; SAMIType: CC; }\n-->\n</STYLE>\n</HEAD>\n<BODY>\n`;
+
+    targetSubtitles.forEach((sub) => {
       const msStart = parseMs(sub.start);
       const msEnd = parseMs(sub.end);
       smiContent += `<SYNC Start=${msStart}><P Class=TRANS>${sub.text}\n`;
@@ -108,7 +115,7 @@ export default function HistoryPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.title}_${project.targetLang}_${getFormattedDate()}.smi`;
+    link.download = `${project.title}_${langSuffix}_${getFormattedDate()}.smi`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -165,25 +172,44 @@ export default function HistoryPage() {
                     {project.translatedSubtitles?.[0]?.text || '번역 내용 없음...'}
                   </div>
                   
-                  <div className="flex items-center gap-2 mt-auto">
-                    <button 
-                      onClick={() => downloadSRT(project)}
-                      className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-semibold"
-                    >
-                      <Download size={14} /> .SRT
-                    </button>
-                    <button 
-                      onClick={() => downloadSMI(project)}
-                      className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-semibold"
-                    >
-                      <Download size={14} /> .SMI
-                    </button>
+                  <div className="flex flex-col gap-2 mt-auto">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-500 w-10 shrink-0 text-center bg-gray-100 rounded py-1">원본</span>
+                      <button 
+                        onClick={() => downloadSRT(project, true)}
+                        className="flex-1 flex justify-center items-center gap-1.5 py-1.5 px-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-xs font-semibold"
+                      >
+                        <Download size={14} /> .SRT
+                      </button>
+                      <button 
+                        onClick={() => downloadSMI(project, true)}
+                        className="flex-1 flex justify-center items-center gap-1.5 py-1.5 px-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-xs font-semibold"
+                      >
+                        <Download size={14} /> .SMI
+                      </button>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-blue-600 w-10 shrink-0 text-center bg-blue-50 border border-blue-100 rounded py-1">번역</span>
+                      <button 
+                        onClick={() => downloadSRT(project, false)}
+                        className="flex-1 flex justify-center items-center gap-1.5 py-1.5 px-2 bg-white border border-gray-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors text-xs font-semibold"
+                      >
+                        <Download size={14} /> .SRT
+                      </button>
+                      <button 
+                        onClick={() => downloadSMI(project, false)}
+                        className="flex-1 flex justify-center items-center gap-1.5 py-1.5 px-2 bg-white border border-gray-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors text-xs font-semibold"
+                      >
+                        <Download size={14} /> .SMI
+                      </button>
+                    </div>
+
                     <button 
                       onClick={() => handleDelete(project.id)}
-                      className="p-2 border border-red-200 text-red-500 rounded-md hover:bg-red-50 transition-colors"
-                      title="작업 내역 삭제"
+                      className="mt-1 flex justify-center items-center gap-1.5 py-2 border border-red-200 text-red-500 rounded-md hover:bg-red-50 transition-colors text-sm font-semibold"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={16} /> 기록 삭제
                     </button>
                   </div>
                 </div>
