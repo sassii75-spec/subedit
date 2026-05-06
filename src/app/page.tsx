@@ -236,6 +236,13 @@ export default function Home() {
     }
   };
 
+  // 특정 자막 시간으로 비디오 이동
+  const seekToSubtitle = (startStr: string) => {
+    if (!videoRef.current) return;
+    const ms = parseMs(startStr);
+    videoRef.current.currentTime = ms / 1000;
+  };
+
   // 활성화된 자막으로 자동 스크롤
   useEffect(() => {
     if (activeSubtitleId !== null) {
@@ -442,8 +449,12 @@ export default function Home() {
                       className={`flex gap-4 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-blue-400
                         ${isActive ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-transparent hover:border-gray-200'}`}
                     >
-                      <div className={`flex flex-col items-center justify-start pt-1 text-xs font-mono gap-1 w-12 shrink-0 ${isActive ? 'text-blue-600 font-bold' : 'text-gray-400 opacity-50'}`}>
-                        <span>{sub.start}</span>
+                      <div 
+                        onClick={() => seekToSubtitle(sub.start)}
+                        title="클릭 시 이 시간으로 영상 이동"
+                        className={`flex flex-col items-center justify-start pt-1 text-xs font-mono gap-1 w-12 shrink-0 cursor-pointer hover:scale-105 transition-transform ${isActive ? 'text-blue-600 font-bold' : 'text-gray-400 opacity-50 hover:opacity-100 hover:text-blue-500'}`}
+                      >
+                        <span className="hover:underline">{sub.start}</span>
                       </div>
                       <textarea 
                         className={`flex-1 w-full bg-transparent resize-none outline-none text-[15px] leading-relaxed min-h-[44px] ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}`}
@@ -510,8 +521,12 @@ export default function Home() {
                       className={`flex gap-4 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-blue-400
                         ${isActive ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-transparent hover:border-gray-200'}`}
                     >
-                      <div className={`flex flex-col items-center justify-start pt-1 text-xs font-mono gap-1 w-12 shrink-0 ${isActive ? 'text-blue-600 font-bold' : 'text-gray-400 opacity-50'}`}>
-                        <span>{sub.start}</span>
+                      <div 
+                        onClick={() => seekToSubtitle(sub.start)}
+                        title="클릭 시 이 시간으로 영상 이동"
+                        className={`flex flex-col items-center justify-start pt-1 text-xs font-mono gap-1 w-12 shrink-0 cursor-pointer hover:scale-105 transition-transform ${isActive ? 'text-blue-600 font-bold' : 'text-gray-400 opacity-50 hover:opacity-100 hover:text-blue-500'}`}
+                      >
+                        <span className="hover:underline">{sub.start}</span>
                       </div>
                       <textarea 
                         className={`flex-1 w-full bg-transparent resize-none outline-none text-[15px] leading-relaxed min-h-[44px] ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}`}
