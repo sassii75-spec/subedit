@@ -65,6 +65,15 @@ export default function HistoryPage() {
     return 0;
   };
 
+  const getFormattedDate = () => {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${mm}${dd}_${hh}${min}`;
+  };
+
   const downloadSRT = (project: SubtitleProject) => {
     let srtContent = '';
     project.translatedSubtitles.forEach((sub, idx) => {
@@ -77,7 +86,7 @@ export default function HistoryPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.title}_${project.targetLang}.srt`;
+    link.download = `${project.title}_${project.targetLang}_${getFormattedDate()}.srt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -99,7 +108,7 @@ export default function HistoryPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${project.title}_${project.targetLang}.smi`;
+    link.download = `${project.title}_${project.targetLang}_${getFormattedDate()}.smi`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

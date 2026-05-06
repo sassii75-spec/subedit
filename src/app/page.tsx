@@ -191,38 +191,6 @@ export default function Home() {
     ));
   };
 
-  const downloadSRT = () => {
-    if (translatedSubtitles.length === 0) {
-      alert('다운로드할 번역 자막이 없습니다.');
-      return;
-    }
-
-    // SRT 형식 문자열 생성
-    // SRT 시간 포맷: 00:00:00,000
-    // 현재 포맷은 MM:SS 또는 HH:MM:SS 이므로 .000을 붙여주고 자리수를 맞춰줍니다.
-    let srtContent = '';
-    translatedSubtitles.forEach((sub, idx) => {
-      const formatSrtTime = (timeStr: string) => {
-        const parts = timeStr.split(':');
-        if (parts.length === 2) return `00:${timeStr},000`; // MM:SS
-        return `${timeStr},000`; // HH:MM:SS
-      };
-
-      srtContent += `${idx + 1}\n`;
-      srtContent += `${formatSrtTime(sub.start)} --> ${formatSrtTime(sub.end)}\n`;
-      srtContent += `${sub.text}\n\n`;
-    });
-
-    const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `subtitle_${targetLang}.srt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handleSaveToHistory = async () => {
     if (originalSubtitles.length === 0 || translatedSubtitles.length === 0) {
       alert('저장할 자막 데이터가 없습니다. 먼저 번역을 진행해주세요.');
@@ -241,41 +209,13 @@ export default function Home() {
         translatedSubtitles,
         createdAt: serverTimestamp(),
       });
-      alert('성공적으로 저장되었습니다!');
+      alert('성공적으로 저장되었습니다!\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
     } catch (err) {
       console.error('Save Error:', err);
       alert('저장 중 오류가 발생했습니다.');
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const downloadSMI = () => {
-    if (translatedSubtitles.length === 0) {
-      alert('다운로드할 번역 자막이 없습니다.');
-      return;
-    }
-
-    let smiContent = `<SAMI>\n<HEAD>\n<TITLE>SubEdit Subtitles</TITLE>\n<STYLE TYPE="text/css">\n<!--\nP { font-family: Arial; font-size: 14pt; text-align: center; color: #FFFFFF; }\n.TRANS { Name: Translated; lang: ${targetLang}; SAMIType: CC; }\n-->\n</STYLE>\n</HEAD>\n<BODY>\n`;
-
-    translatedSubtitles.forEach((sub) => {
-      const msStart = parseMs(sub.start);
-      const msEnd = parseMs(sub.end);
-
-      smiContent += `<SYNC Start=${msStart}><P Class=TRANS>${sub.text}\n`;
-      smiContent += `<SYNC Start=${msEnd}><P Class=TRANS>&nbsp;\n`;
-    });
-
-    smiContent += `</BODY>\n</SAMI>`;
-
-    const blob = new Blob([smiContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `subtitle_${targetLang}.smi`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   // 비디오 시간 업데이트 감지 및 자막 싱크 맞춤
@@ -549,19 +489,7 @@ export default function Home() {
                   disabled={isSaving}
                   className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isSaving ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-white bg-gray-800 border-gray-800 hover:bg-gray-700'}`}
                 >
-                  {isSaving ? '저장 중...' : '작업 저장'}
-                </button>
-                <button 
-                  onClick={downloadSRT}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-                >
-                  <Download size={14} /> .SRT
-                </button>
-                <button 
-                  onClick={downloadSMI}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-                >
-                  <Download size={14} /> .SMI
+                  {isSaving ? '저장 중...' : '작업 저장 후 다운로드'}
                 </button>
               </div>
             </div>
