@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors } from 'lucide-react';
+import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors, Combine, X } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { db } from '@/lib/firebase';
@@ -49,6 +49,16 @@ export default function Home() {
   const [activeSubtitleId, setActiveSubtitleId] = useState<number | null>(null);
   const [currentOverlay, setCurrentOverlay] = useState<string | null>(null);
   const [isClipping, setIsClipping] = useState<number | null>(null);
+  
+  // 멀티 클립 병합용 상태
+  const [selectedSubtitles, setSelectedSubtitles] = useState<Set<number>>(new Set());
+  const [isMerging, setIsMerging] = useState(false);
+  
+  // 수동 컷편집용 상태
+  const [isManualClipOpen, setIsManualClipOpen] = useState(false);
+  const [manualClipStart, setManualClipStart] = useState('00:00:00');
+  const [manualClipEnd, setManualClipEnd] = useState('00:00:10');
+  const [isManualClipping, setIsManualClipping] = useState(false);
   
   // 스크롤 동기화를 위한 ref
   const originalListRef = useRef<HTMLDivElement>(null);
@@ -354,6 +364,136 @@ export default function Home() {
     }
   };
 
+  // 다중 클립 병합 (Concat)
+  const handleMergeSelectedClips = async () => {
+    if (!videoSrc || selectedSubtitles.size === 0) return;
+    if (!ffmpegRef.current || !ffmpegRef.current.loaded) {
+      alert("FFmpeg 엔진이 로딩 중이거나 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
+    
+    setIsMerging(true);
+    setProgressMsg('선택된 구간 병합 중...');
+    try {
+      const ffmpeg = ffmpegRef.current;
+      
+      // 원래 시간에 따라 오름차순 정렬
+      const sortedSubs = originalSubtitles.filter(s => selectedSubtitles.has(s.id));
+      let fileList = '';
+      
+      for (let i = 0; i < sortedSubs.length; i++) {
+        const sub = sortedSubs[i];
+        const startSec = parseMs(sub.start) / 1000;
+        const endSec = parseMs(sub.end) / 1000;
+        let duration = endSec - startSec;
+        if (duration < 0.5) duration = 1;
+        
+        const chunkName = `chunk_merge_${i}.mp4`;
+        setProgressMsg(`병합 준비 중: [${i + 1}/${sortedSubs.length}]`);
+        await ffmpeg.exec([
+          '-ss', String(startSec),
+          '-i', 'input.mp4',
+          '-t', String(duration + 1),
+          '-c', 'copy',
+          chunkName
+        ]);
+        
+        fileList += `file '${chunkName}'\n`;
+      }
+      
+      // concat 프로토콜을 위한 list.txt 작성
+      setProgressMsg(`파일 이어 붙이는 중...`);
+      await ffmpeg.writeFile('list.txt', fileList);
+      
+      // concat 실행
+      await ffmpeg.exec([
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', 'list.txt',
+        '-c', 'copy',
+        'merged_output.mp4'
+      ]);
+      
+      const data = await ffmpeg.readFile('merged_output.mp4');
+      const videoBlob = new Blob([data as any], { type: 'video/mp4' });
+      const url = URL.createObjectURL(videoBlob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `merged_clips.mp4`;
+      a.click();
+      
+      URL.revokeObjectURL(url);
+      
+      // 메모리 클린업
+      await ffmpeg.deleteFile('list.txt');
+      await ffmpeg.deleteFile('merged_output.mp4');
+      for (let i = 0; i < sortedSubs.length; i++) {
+        await ffmpeg.deleteFile(`chunk_merge_${i}.mp4`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("병합 중 오류가 발생했습니다. 영상을 다시 업로드한 후 시도해보세요.");
+    } finally {
+      setIsMerging(false);
+      setProgressMsg('');
+      setSelectedSubtitles(new Set()); // 선택 초기화
+    }
+  };
+
+  // 수동 컷편집
+  const handleManualClip = async () => {
+    if (!videoSrc) {
+      alert("원본 영상이 없습니다. 영상을 먼저 업로드해주세요.");
+      return;
+    }
+    if (!ffmpegRef.current || !ffmpegRef.current.loaded) {
+      alert("FFmpeg 엔진이 준비되지 않았습니다.");
+      return;
+    }
+    
+    setIsManualClipping(true);
+    try {
+      const ffmpeg = ffmpegRef.current;
+      const startSec = parseMs(manualClipStart) / 1000;
+      const endSec = parseMs(manualClipEnd) / 1000;
+      let duration = endSec - startSec;
+      
+      if (duration <= 0) {
+        alert("종료 시간이 시작 시간보다 커야 합니다.");
+        return;
+      }
+      
+      const outName = `manual_clip.mp4`;
+      
+      await ffmpeg.exec([
+        '-ss', String(startSec),
+        '-i', 'input.mp4',
+        '-t', String(duration),
+        '-c', 'copy',
+        outName
+      ]);
+      
+      const data = await ffmpeg.readFile(outName);
+      const videoBlob = new Blob([data as any], { type: 'video/mp4' });
+      const url = URL.createObjectURL(videoBlob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clip_${manualClipStart.replace(/:/g, '')}_to_${manualClipEnd.replace(/:/g, '')}.mp4`;
+      a.click();
+      
+      URL.revokeObjectURL(url);
+      await ffmpeg.deleteFile(outName);
+      setIsManualClipOpen(false);
+    } catch (e) {
+      console.error(e);
+      alert("수동 자르기 중 오류가 발생했습니다.");
+    } finally {
+      setIsManualClipping(false);
+    }
+  };
+
   // 활성화된 자막으로 자동 스크롤
   useEffect(() => {
     if (activeSubtitleId !== null) {
@@ -465,6 +605,13 @@ export default function Home() {
             <Mic size={16} /> 실시간 캡션
           </button>
           
+          <button 
+            onClick={() => setIsManualClipOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            <Scissors size={16} /> 수동 컷편집
+          </button>
+          
           <input 
             type="file" 
             accept="video/*" 
@@ -486,6 +633,48 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {/* 수동 컷편집 팝업 폼 */}
+      {isManualClipOpen && (
+        <div className="bg-white border-b border-gray-200 p-4 shadow-sm z-10 flex flex-wrap items-center justify-center gap-4">
+          <span className="text-sm font-bold text-gray-700">수동 시간 클리핑</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-semibold">시작</span>
+            <input 
+              type="text" 
+              value={manualClipStart}
+              onChange={(e) => setManualClipStart(e.target.value)}
+              placeholder="00:00:00"
+              className="px-2 py-1 border rounded w-24 text-sm font-mono text-center outline-none focus:border-blue-400"
+            />
+          </div>
+          <span className="text-gray-400">~</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-semibold">종료</span>
+            <input 
+              type="text" 
+              value={manualClipEnd}
+              onChange={(e) => setManualClipEnd(e.target.value)}
+              placeholder="00:00:10"
+              className="px-2 py-1 border rounded w-24 text-sm font-mono text-center outline-none focus:border-blue-400"
+            />
+          </div>
+          <button 
+            onClick={handleManualClip}
+            disabled={isManualClipping}
+            className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            {isManualClipping ? <Loader2 size={16} className="animate-spin" /> : <Scissors size={16} />}
+            잘라내기
+          </button>
+          <button 
+            onClick={() => setIsManualClipOpen(false)}
+            className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
 
       {/* Main Workspace (Split Pane) */}
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -546,10 +735,22 @@ export default function Home() {
           {/* Left Pane: Original Subtitles */}
           <div className="flex flex-col w-1/2 border-r border-gray-200 bg-white shadow-sm z-0">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
-              <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                원본 자막 (자동 감지)
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  원본 자막 (자동 감지)
+                </h2>
+              </div>
+              {selectedSubtitles.size > 0 && (
+                <button
+                  onClick={handleMergeSelectedClips}
+                  disabled={isMerging}
+                  className="text-xs font-semibold px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+                >
+                  {isMerging ? <Loader2 size={14} className="animate-spin" /> : <Combine size={14} />}
+                  선택된 {selectedSubtitles.size}개 구간 병합
+                </button>
+              )}
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={originalListRef}>
@@ -560,13 +761,28 @@ export default function Home() {
               ) : (
                 originalSubtitles.map((sub) => {
                   const isActive = sub.id === activeSubtitleId;
+                  const isChecked = selectedSubtitles.has(sub.id);
                   return (
                     <div 
                       key={sub.id} 
                       id={`orig-${sub.id}`}
-                      className={`flex gap-4 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-blue-400
-                        ${isActive ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-transparent hover:border-gray-200'}`}
+                      className={`flex gap-3 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-blue-400
+                        ${isActive ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-transparent hover:border-gray-200'}
+                        ${isChecked ? 'border-blue-400 bg-blue-50' : ''}`}
                     >
+                      <div className="flex flex-col items-center justify-start pt-2">
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const newSet = new Set(selectedSubtitles);
+                            if (e.target.checked) newSet.add(sub.id);
+                            else newSet.delete(sub.id);
+                            setSelectedSubtitles(newSet);
+                          }}
+                          className="w-4 h-4 cursor-pointer accent-blue-600"
+                        />
+                      </div>
                       <div 
                         onClick={() => seekToSubtitle(sub.start)}
                         title="클릭 시 이 시간으로 영상 이동"
@@ -641,13 +857,28 @@ export default function Home() {
               ) : (
                 translatedSubtitles.map((sub) => {
                   const isActive = sub.id === activeSubtitleId;
+                  const isChecked = selectedSubtitles.has(sub.id);
                   return (
                     <div 
                       key={sub.id} 
                       id={`trans-${sub.id}`}
-                      className={`flex gap-4 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-blue-400
-                        ${isActive ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-transparent hover:border-gray-200'}`}
+                      className={`flex gap-3 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-green-400
+                        ${isActive ? 'bg-green-50 border-green-300 ring-1 ring-green-200' : 'bg-white border-transparent hover:border-gray-200'}
+                        ${isChecked ? 'border-blue-400 bg-blue-50' : ''}`}
                     >
+                      <div className="flex flex-col items-center justify-start pt-2">
+                        <input 
+                          type="checkbox" 
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const newSet = new Set(selectedSubtitles);
+                            if (e.target.checked) newSet.add(sub.id);
+                            else newSet.delete(sub.id);
+                            setSelectedSubtitles(newSet);
+                          }}
+                          className="w-4 h-4 cursor-pointer accent-blue-600"
+                        />
+                      </div>
                       <div 
                         onClick={() => seekToSubtitle(sub.start)}
                         title="클릭 시 이 시간으로 영상 이동"
