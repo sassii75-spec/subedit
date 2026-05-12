@@ -124,8 +124,8 @@ export default function Home() {
       setProgressMsg('영상 로드 중...');
       await ffmpeg.writeFile('input.mp4', await fetchFile(file));
       
-      // 분할 처리 (Chunking) 10분(600초) 단위
-      const CHUNK_SIZE = 10 * 60;
+      // Vercel Serverless 최대 4.5MB 제한을 피하기 위해 분할 처리 (Chunking) 4분(240초) 단위로 축소
+      const CHUNK_SIZE = 4 * 60;
       const totalChunks = Math.ceil(duration / CHUNK_SIZE);
       let allSegments: any[] = [];
       let globalSegmentId = 0;
@@ -140,7 +140,7 @@ export default function Home() {
           '-ss', String(startSec), 
           '-t', String(currentChunkDuration), 
           '-i', 'input.mp4', 
-          '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', 
+          '-vn', '-ac', '1', '-ar', '16000', '-b:a', '32k', 
           chunkFileName
         ]);
         
@@ -157,7 +157,15 @@ export default function Home() {
           body: formData,
         });
         
-        const result = await response.json();
+        const contentType = response.headers.get('content-type');
+        let result;
+        if (contentType && contentType.includes('application/json')) {
+          result = await response.json();
+        } else {
+          const text = await response.text();
+          throw new Error(`API 오류 (${response.status}): ${text.substring(0, 100)}`);
+        }
+
         if (!response.ok) {
           throw new Error(result.error || 'API 요청 실패');
         }
@@ -219,7 +227,15 @@ export default function Home() {
           }),
         });
 
-        const result = await response.json();
+        const contentType = response.headers.get('content-type');
+        let result;
+        if (contentType && contentType.includes('application/json')) {
+          result = await response.json();
+        } else {
+          const text = await response.text();
+          throw new Error(`번역 API 오류 (${response.status}): ${text.substring(0, 100)}`);
+        }
+
         if (!response.ok) {
           throw new Error(result.error || 'API 요청 실패');
         }
