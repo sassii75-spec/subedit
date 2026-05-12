@@ -541,11 +541,14 @@ export default function Home() {
       const outName = 'full_video_with_subs.mp4';
       
       // 3. 인코딩 없이 소프트서브 자막 트랙 추가 (mov_text 포맷 사용)
+      // -disposition:s:0 default 를 추가하여 플레이어에서 자막이 기본적으로 켜지도록 강제합니다.
       await ffmpeg.exec([
         '-i', 'input.mp4',
         '-i', 'subs.srt',
         '-c', 'copy',
         '-c:s', 'mov_text',
+        '-metadata:s:s:0', 'language=kor',
+        '-disposition:s:0', 'default',
         outName
       ]);
 
@@ -690,6 +693,42 @@ export default function Home() {
           >
             {isFullDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} 
             전체 영상 다운로드
+          </button>
+          
+          <button 
+            onClick={() => {
+              if (translatedSubtitles.length === 0) {
+                alert("번역된 자막이 없습니다.");
+                return;
+              }
+              const formatSrtTime = (timeStr: string) => {
+                const parts = timeStr.split(':');
+                let h = '00', m = '00', s = '00';
+                if (parts.length === 2) {
+                  m = parts[0].padStart(2, '0');
+                  s = parts[1].padStart(2, '0');
+                } else if (parts.length === 3) {
+                  h = parts[0].padStart(2, '0');
+                  m = parts[1].padStart(2, '0');
+                  s = parts[2].padStart(2, '0');
+                }
+                return `${h}:${m}:${s},000`;
+              };
+              const srtContent = translatedSubtitles.map((sub, index) => {
+                return `${index + 1}\n${formatSrtTime(sub.start)} --> ${formatSrtTime(sub.end)}\n${sub.text}\n`;
+              }).join('\n');
+              const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `subtitle_${Date.now()}.srt`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 transition-colors"
+            title="SRT 자막 파일만 따로 다운로드합니다"
+          >
+            <Download size={16} /> SRT 다운로드
           </button>
 
           <button 
