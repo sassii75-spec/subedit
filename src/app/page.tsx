@@ -325,7 +325,7 @@ export default function Home() {
         if (isLiveDubbing) {
           window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(overlaySub.text);
-          const langMap: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', vi: 'vi-VN' };
+          const langMap: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', vi: 'vi-VN', my: 'my-MM', bn: 'bn-BD' };
           utterance.lang = langMap[targetLangRef.current] || 'en-US';
           utterance.rate = 1.1; // 약간 빠르게 읽어싱크 맞춤
           window.speechSynthesis.speak(utterance);
@@ -1123,6 +1123,8 @@ export default function Home() {
                   <option value="zh">중국어 (中文)</option>
                   <option value="ja">일본어 (日本語)</option>
                   <option value="vi">베트남어 (Tiếng Việt)</option>
+                  <option value="my">버마어 (မြန်မာစာ)</option>
+                  <option value="bn">벵골어 (বাংলা)</option>
                 </select>
               </div>
               <div className="flex items-center gap-2">
