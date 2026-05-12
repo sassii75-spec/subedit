@@ -59,6 +59,7 @@ export default function Home() {
   const [manualClipStart, setManualClipStart] = useState('00:00:00');
   const [manualClipEnd, setManualClipEnd] = useState('00:00:10');
   const [isManualClipping, setIsManualClipping] = useState(false);
+  const [isFullDownloading, setIsFullDownloading] = useState(false);
   
   // 스크롤 동기화를 위한 ref
   const originalListRef = useRef<HTMLDivElement>(null);
@@ -494,6 +495,82 @@ export default function Home() {
     }
   };
 
+  // 전체 영상 자막 내장 다운로드 (Softsub)
+  const handleDownloadFullVideoWithSubs = async () => {
+    if (!videoSrc) {
+      alert("원본 영상이 없습니다.");
+      return;
+    }
+    if (translatedSubtitles.length === 0) {
+      alert("번역된 자막이 없습니다. 먼저 번역을 진행해주세요.");
+      return;
+    }
+    if (!ffmpegRef.current || !ffmpegRef.current.loaded) {
+      alert("FFmpeg 엔진이 아직 준비되지 않았습니다.");
+      return;
+    }
+
+    setIsFullDownloading(true);
+    setProgressMsg('전체 영상 자막 병합 중... (Softsub)');
+    
+    try {
+      const ffmpeg = ffmpegRef.current;
+      
+      // 1. SRT 파일 내용 생성
+      const formatSrtTime = (timeStr: string) => {
+        const parts = timeStr.split(':');
+        let h = '00', m = '00', s = '00';
+        if (parts.length === 2) {
+          m = parts[0].padStart(2, '0');
+          s = parts[1].padStart(2, '0');
+        } else if (parts.length === 3) {
+          h = parts[0].padStart(2, '0');
+          m = parts[1].padStart(2, '0');
+          s = parts[2].padStart(2, '0');
+        }
+        return `${h}:${m}:${s},000`;
+      };
+
+      const srtContent = translatedSubtitles.map((sub, index) => {
+        return `${index + 1}\n${formatSrtTime(sub.start)} --> ${formatSrtTime(sub.end)}\n${sub.text}\n`;
+      }).join('\n');
+
+      // 2. FFmpeg 메모리에 SRT 파일 쓰기
+      await ffmpeg.writeFile('subs.srt', srtContent);
+
+      const outName = 'full_video_with_subs.mp4';
+      
+      // 3. 인코딩 없이 소프트서브 자막 트랙 추가 (mov_text 포맷 사용)
+      await ffmpeg.exec([
+        '-i', 'input.mp4',
+        '-i', 'subs.srt',
+        '-c', 'copy',
+        '-c:s', 'mov_text',
+        outName
+      ]);
+
+      const data = await ffmpeg.readFile(outName);
+      const videoBlob = new Blob([data as any], { type: 'video/mp4' });
+      const url = URL.createObjectURL(videoBlob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `subedit_translated_${Date.now()}.mp4`;
+      a.click();
+      
+      URL.revokeObjectURL(url);
+      await ffmpeg.deleteFile('subs.srt');
+      await ffmpeg.deleteFile(outName);
+      
+    } catch (e) {
+      console.error(e);
+      alert("영상 자막 병합 중 오류가 발생했습니다. 개발자 도구의 콘솔을 확인해주세요.");
+    } finally {
+      setIsFullDownloading(false);
+      setProgressMsg('');
+    }
+  };
+
   // 활성화된 자막으로 자동 스크롤
   useEffect(() => {
     if (activeSubtitleId !== null) {
@@ -606,6 +683,16 @@ export default function Home() {
           </button>
           
           <button 
+            onClick={handleDownloadFullVideoWithSubs}
+            disabled={!videoSrc || isFullDownloading}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors disabled:opacity-50"
+            title="소프트서브(Softsub) 방식으로 자막을 영상 트랙에 내장하여 다운로드합니다"
+          >
+            {isFullDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} 
+            전체 영상 다운로드
+          </button>
+
+          <button 
             onClick={() => setIsManualClipOpen(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
           >
@@ -702,21 +789,24 @@ export default function Home() {
               </button>
             </div>
           ) : (
-            <div className="relative w-full h-full flex items-center justify-center group bg-black rounded-lg overflow-hidden shadow-inner">
-              <video 
-                ref={videoRef}
-                src={videoSrc}
-                className="max-h-full max-w-full object-contain"
-                controls
-                onTimeUpdate={handleTimeUpdate}
-              />
-              {currentOverlay && (
-                <div className="absolute bottom-12 w-full flex justify-center pointer-events-none px-4 z-10 transition-opacity">
-                  <div className="bg-black/75 text-white px-6 py-2 rounded-lg text-lg sm:text-xl md:text-2xl font-bold tracking-wide text-center drop-shadow-md border border-white/10">
-                    {currentOverlay}
-                  </div>
+            <div className="relative w-full h-full flex flex-col bg-black rounded-lg overflow-hidden shadow-inner group">
+              {/* 영상 영역 */}
+              <div className="flex-1 flex items-center justify-center min-h-0 bg-black relative">
+                <video 
+                  ref={videoRef}
+                  src={videoSrc}
+                  className="max-h-full max-w-full object-contain"
+                  controls
+                  onTimeUpdate={handleTimeUpdate}
+                />
+              </div>
+              
+              {/* 하단 자막 전용 영역 (블랙 바) */}
+              <div className="h-16 sm:h-20 bg-[#0f0f0f] border-t border-gray-800 flex items-center justify-center px-4 md:px-8 shadow-[inset_0_4px_10px_rgba(0,0,0,0.5)] z-10 shrink-0">
+                <div className="text-white text-base sm:text-lg md:text-xl font-bold tracking-wide text-center leading-snug drop-shadow-md transition-opacity duration-150">
+                  {currentOverlay || <span className="opacity-0">자막 대기중</span>}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
