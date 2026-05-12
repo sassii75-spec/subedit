@@ -367,8 +367,13 @@ export default function Home() {
       
       const a = document.createElement('a');
       a.href = url;
-      a.download = `clip_${startStr.replace(/:/g, '')}.mp4`;
+      const filename = `clip_${startStr.replace(/:/g, '')}.mp4`;
+      a.download = filename;
       a.click();
+      
+      setTimeout(() => {
+        alert(`다운로드가 완료되었습니다!\n브라우저의 기본 다운로드 폴더를 확인해주세요.\n(파일명: ${filename})`);
+      }, 500);
       
       URL.revokeObjectURL(url);
       await ffmpeg.deleteFile(outName); // 메모리 확보
@@ -439,6 +444,10 @@ export default function Home() {
       a.download = `merged_clips.mp4`;
       a.click();
       
+      setTimeout(() => {
+        alert(`다중 클립 병합 다운로드가 완료되었습니다!\n브라우저의 기본 다운로드 폴더를 확인해주세요.\n(파일명: merged_clips.mp4)`);
+      }, 500);
+      
       URL.revokeObjectURL(url);
       
       // 메모리 클린업
@@ -496,8 +505,13 @@ export default function Home() {
       
       const a = document.createElement('a');
       a.href = url;
-      a.download = `clip_${manualClipStart.replace(/:/g, '')}_to_${manualClipEnd.replace(/:/g, '')}.mp4`;
+      const filename = `clip_${manualClipStart.replace(/:/g, '')}_to_${manualClipEnd.replace(/:/g, '')}.mp4`;
+      a.download = filename;
       a.click();
+      
+      setTimeout(() => {
+        alert(`수동 시간 클리핑 영상이 저장되었습니다!\n브라우저의 기본 다운로드 폴더를 확인해주세요.\n(파일명: ${filename})`);
+      }, 500);
       
       URL.revokeObjectURL(url);
       await ffmpeg.deleteFile(outName);
@@ -573,8 +587,13 @@ export default function Home() {
       
       const a = document.createElement('a');
       a.href = url;
-      a.download = `subedit_translated_${Date.now()}.mp4`;
+      const filename = `subedit_translated_${Date.now()}.mp4`;
+      a.download = filename;
       a.click();
+      
+      setTimeout(() => {
+        alert(`자막 포함 전체 영상이 저장되었습니다!\n브라우저의 기본 다운로드 폴더를 확인해주세요.\n(파일명: ${filename})`);
+      }, 500);
       
       URL.revokeObjectURL(url);
       await ffmpeg.deleteFile('subs.srt');
