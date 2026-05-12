@@ -31,6 +31,7 @@ export default function Home() {
   const [originalSubtitles, setOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
 
   const [translatedSubtitles, setTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
+  const [translationsCache, setTranslationsCache] = useState<Record<string, {id: number, start: string, end: string, text: string}[]>>({});
 
   const [targetLang, setTargetLang] = useState('en');
   const targetLangRef = useRef(targetLang);
@@ -226,6 +227,12 @@ export default function Home() {
         }
       }
       
+      // 번역 완료 시 캐시에 저장
+      setTranslationsCache(prev => ({
+        ...prev,
+        [targetLang]: translatedAcc
+      }));
+      
       setTranslateProgressMsg('번역 완료!');
       setTimeout(() => setTranslateProgressMsg('AI 전체 번역'), 2000);
     } catch (err: any) {
@@ -244,9 +251,17 @@ export default function Home() {
   };
 
   const handleSubtitleEdit = (id: number, newText: string) => {
-    setTranslatedSubtitles(prev => prev.map(sub => 
-      sub.id === id ? { ...sub, text: newText } : sub
-    ));
+    setTranslatedSubtitles(prev => {
+      const updated = prev.map(sub => 
+        sub.id === id ? { ...sub, text: newText } : sub
+      );
+      // 수동 편집 시 캐시도 동시에 업데이트 (즉시 반영)
+      setTranslationsCache(cache => ({
+        ...cache,
+        [targetLang]: updated
+      }));
+      return updated;
+    });
   };
 
   const handleSaveToHistory = async () => {
@@ -948,7 +963,17 @@ export default function Home() {
                 <Languages size={18} className="text-blue-600" />
                 <select 
                   value={targetLang}
-                  onChange={(e) => setTargetLang(e.target.value)}
+                  onChange={(e) => {
+                    const newLang = e.target.value;
+                    setTargetLang(newLang);
+                    
+                    // 캐시된 자막이 있으면 즉시 불러오고, 없으면 빈 배열로 초기화 (자동으로 '번역' 버튼을 유도)
+                    if (translationsCache[newLang]) {
+                      setTranslatedSubtitles(translationsCache[newLang]);
+                    } else {
+                      setTranslatedSubtitles([]);
+                    }
+                  }}
                   className="text-sm font-bold text-gray-800 bg-transparent outline-none cursor-pointer border-b border-dashed border-gray-400 pb-0.5"
                 >
                   <option value="en">영어 (English)</option>
