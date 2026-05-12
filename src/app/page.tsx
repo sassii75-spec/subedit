@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors, Combine, X } from 'lucide-react';
+import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors, Combine, X, Volume2, VolumeX } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { db } from '@/lib/firebase';
@@ -61,6 +61,9 @@ export default function Home() {
   const [manualClipEnd, setManualClipEnd] = useState('00:00:10');
   const [isManualClipping, setIsManualClipping] = useState(false);
   const [isFullDownloading, setIsFullDownloading] = useState(false);
+  
+  // 실시간 더빙 상태
+  const [isLiveDubbing, setIsLiveDubbing] = useState(false);
   
   // 스크롤 동기화를 위한 ref
   const originalListRef = useRef<HTMLDivElement>(null);
@@ -317,10 +320,33 @@ export default function Home() {
     });
     
     if (overlaySub && overlaySub.text) {
-      if (currentOverlay !== overlaySub.text) setCurrentOverlay(overlaySub.text);
+      if (currentOverlay !== overlaySub.text) {
+        setCurrentOverlay(overlaySub.text);
+        if (isLiveDubbing) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(overlaySub.text);
+          const langMap: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', vi: 'vi-VN' };
+          utterance.lang = langMap[targetLangRef.current] || 'en-US';
+          utterance.rate = 1.1; // 약간 빠르게 읽어싱크 맞춤
+          window.speechSynthesis.speak(utterance);
+        }
+      }
     } else {
-      if (currentOverlay !== null) setCurrentOverlay(null);
+      if (currentOverlay !== null) {
+        setCurrentOverlay(null);
+      }
     }
+  };
+
+  const toggleLiveDubbing = () => {
+    setIsLiveDubbing(prev => {
+      const next = !prev;
+      if (videoRef.current) {
+        videoRef.current.muted = next; // 더빙 시 원본 소리 음소거
+      }
+      if (!next) window.speechSynthesis.cancel();
+      return next;
+    });
   };
 
   // 특정 자막 시간으로 비디오 이동
@@ -385,7 +411,92 @@ export default function Home() {
     }
   };
 
-  // 다중 클립 병합 (Concat)
+  // AI 더빙 클리핑 (FFmpeg 컷편집 + TTS 합성)
+  const handleDubClipVideo = async (startStr: string, endStr: string, text: string, index: number) => {
+    if (!videoSrc) {
+      alert("원본 영상이 없습니다. 영상을 먼저 업로드해주세요.");
+      return;
+    }
+    if (!text) {
+      alert("번역된 텍스트가 없습니다.");
+      return;
+    }
+    if (!ffmpegRef.current || !ffmpegRef.current.loaded) {
+      alert("FFmpeg 엔진이 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
+    
+    setIsClipping(index);
+    setProgressMsg('AI 더빙 생성 중...');
+    try {
+      const ffmpeg = ffmpegRef.current;
+      const startSec = parseMs(startStr) / 1000;
+      const endSec = parseMs(endStr) / 1000;
+      let duration = endSec - startSec;
+      if (duration < 0.5) duration = 1;
+      
+      // 1. TTS 오디오 가져오기
+      const ttsResponse = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, targetLanguage: targetLang })
+      });
+      
+      if (!ttsResponse.ok) throw new Error("TTS 생성 실패");
+      
+      const ttsBlob = await ttsResponse.blob();
+      const ttsArrayBuffer = await ttsBlob.arrayBuffer();
+      const ttsUint8Array = new Uint8Array(ttsArrayBuffer);
+      
+      await ffmpeg.writeFile('tts.mp3', ttsUint8Array);
+      
+      const outName = `dub_clip_${index}.mp4`;
+      
+      setProgressMsg('영상과 음성 합성 중...');
+      
+      // 2. FFmpeg 합성
+      // 영상은 startSec에서 duration 만큼 자르고 (원본 영상 오디오는 무시: -map 0:v -map 1:a)
+      // tts.mp3를 합칩니다.
+      await ffmpeg.exec([
+        '-ss', String(startSec),
+        '-i', 'input.mp4',
+        '-i', 'tts.mp3',
+        '-t', String(duration),
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        outName
+      ]);
+      
+      const data = await ffmpeg.readFile(outName);
+      const videoBlob = new Blob([data as any], { type: 'video/mp4' });
+      const url = URL.createObjectURL(videoBlob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      const filename = `dub_${startStr.replace(/:/g, '')}.mp4`;
+      a.download = filename;
+      a.click();
+      
+      setTimeout(() => {
+        alert(`AI 더빙 클립 영상이 저장되었습니다!\n브라우저의 기본 다운로드 폴더를 확인해주세요.\n(파일명: ${filename})`);
+      }, 500);
+      
+      URL.revokeObjectURL(url);
+      await ffmpeg.deleteFile(outName);
+      await ffmpeg.deleteFile('tts.mp3');
+    } catch (e) {
+      console.error(e);
+      alert("AI 더빙 클립 생성 중 오류가 발생했습니다.");
+    } finally {
+      setIsClipping(null);
+      setProgressMsg('');
+    }
+  };
+
+  // 다국어 클립 병합 (Concat)
   const handleMergeSelectedClips = async () => {
     if (!videoSrc || selectedSubtitles.size === 0) return;
     if (!ffmpegRef.current || !ffmpegRef.current.loaded) {
@@ -712,6 +823,19 @@ export default function Home() {
           <Link href="/history" className="text-sm font-semibold text-gray-600 hover:text-blue-600 mr-2 transition-colors">
             히스토리 보기
           </Link>
+          <button 
+            onClick={toggleLiveDubbing}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              isLiveDubbing 
+                ? 'bg-purple-100 text-purple-700 border border-purple-200 hover:bg-purple-200' 
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+            title="재생 시 번역된 자막을 기기의 내장 AI 음성으로 실시간으로 읽어줍니다."
+          >
+            {isLiveDubbing ? <Volume2 size={16} /> : <VolumeX size={16} />} 
+            {isLiveDubbing ? '실시간 더빙 켬' : '실시간 더빙 끔'}
+          </button>
+
           <button 
             onClick={() => setIsLiveMode(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
@@ -1065,15 +1189,26 @@ export default function Home() {
                         onChange={(e) => handleSubtitleEdit(sub.id, e.target.value)}
                         rows={2}
                       />
-                      <button
-                        onClick={() => handleClipVideo(sub.start, sub.end, sub.id)}
-                        disabled={isClipping !== null}
-                        title="이 구간 영상 자르기 (초고속 다운로드)"
-                        className={`shrink-0 p-2 rounded-md transition-colors h-fit mt-1
-                          ${isClipping === sub.id ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
-                      >
-                        {isClipping === sub.id ? <Loader2 size={16} className="animate-spin" /> : <Scissors size={16} />}
-                      </button>
+                      <div className="flex flex-col gap-1 mt-1 shrink-0">
+                        <button
+                          onClick={() => handleClipVideo(sub.start, sub.end, sub.id)}
+                          disabled={isClipping !== null}
+                          title="이 구간 영상 자르기 (원본 음성)"
+                          className={`p-2 rounded-md transition-colors
+                            ${isClipping === sub.id ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                        >
+                          {isClipping === sub.id ? <Loader2 size={16} className="animate-spin" /> : <Scissors size={16} />}
+                        </button>
+                        <button
+                          onClick={() => handleDubClipVideo(sub.start, sub.end, sub.text, sub.id)}
+                          disabled={isClipping !== null}
+                          title="이 구간 AI 더빙 추출 (번역된 음성 입히기)"
+                          className={`p-2 rounded-md transition-colors
+                            ${isClipping === sub.id ? 'bg-purple-100 text-purple-600' : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'}`}
+                        >
+                          {isClipping === sub.id ? <Loader2 size={16} className="animate-spin" /> : <Mic size={16} />}
+                        </button>
+                      </div>
                     </div>
                   );
                 })
