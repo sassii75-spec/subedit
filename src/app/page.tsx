@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2 } from 'lucide-react';
+import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { db } from '@/lib/firebase';
@@ -47,6 +47,8 @@ export default function Home() {
   const [progressMsg, setProgressMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [activeSubtitleId, setActiveSubtitleId] = useState<number | null>(null);
+  const [currentOverlay, setCurrentOverlay] = useState<string | null>(null);
+  const [isClipping, setIsClipping] = useState<number | null>(null);
   
   // 스크롤 동기화를 위한 ref
   const originalListRef = useRef<HTMLDivElement>(null);
@@ -268,6 +270,7 @@ export default function Home() {
     if (!videoRef.current) return;
     const currentMs = videoRef.current.currentTime * 1000;
     
+    // 원본 자막 리스트 싱크
     const activeSub = originalSubtitles.find(sub => {
       const startMs = parseMs(sub.start);
       const endMs = parseMs(sub.end);
@@ -279,6 +282,19 @@ export default function Home() {
     } else if (!activeSub && activeSubtitleId !== null) {
       setActiveSubtitleId(null);
     }
+
+    // 영상 화면 내 번역 자막 오버레이 업데이트
+    const overlaySub = translatedSubtitles.find(sub => {
+      const startMs = parseMs(sub.start);
+      const endMs = parseMs(sub.end);
+      return currentMs >= startMs && currentMs <= endMs;
+    });
+    
+    if (overlaySub && overlaySub.text) {
+      if (currentOverlay !== overlaySub.text) setCurrentOverlay(overlaySub.text);
+    } else {
+      if (currentOverlay !== null) setCurrentOverlay(null);
+    }
   };
 
   // 특정 자막 시간으로 비디오 이동
@@ -286,6 +302,56 @@ export default function Home() {
     if (!videoRef.current) return;
     const ms = parseMs(startStr);
     videoRef.current.currentTime = ms / 1000;
+    videoRef.current.play().catch(e => console.log('Auto-play prevented', e));
+  };
+
+  // 비디오 클리핑 (FFmpeg 컷편집)
+  const handleClipVideo = async (startStr: string, endStr: string, index: number) => {
+    if (!videoSrc) {
+      alert("원본 영상이 없습니다. 영상을 먼저 업로드해주세요.");
+      return;
+    }
+    if (!ffmpegRef.current || !ffmpegRef.current.loaded) {
+      alert("FFmpeg 엔진이 로딩 중이거나 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
+    
+    setIsClipping(index);
+    try {
+      const ffmpeg = ffmpegRef.current;
+      const startSec = parseMs(startStr) / 1000;
+      const endSec = parseMs(endStr) / 1000;
+      let duration = endSec - startSec;
+      if (duration < 0.5) duration = 1; // 최소 1초
+      
+      const outName = `clip_${index}.mp4`;
+      
+      // -c copy 를 사용하여 인코딩 없이 초고속으로 잘라냅니다. (+1초 패딩 추가)
+      await ffmpeg.exec([
+        '-ss', String(startSec),
+        '-i', 'input.mp4',
+        '-t', String(duration + 1),
+        '-c', 'copy',
+        outName
+      ]);
+      
+      const data = await ffmpeg.readFile(outName);
+      const videoBlob = new Blob([data as any], { type: 'video/mp4' });
+      const url = URL.createObjectURL(videoBlob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clip_${startStr.replace(/:/g, '')}.mp4`;
+      a.click();
+      
+      URL.revokeObjectURL(url);
+      await ffmpeg.deleteFile(outName); // 메모리 확보
+    } catch (e) {
+      console.error(e);
+      alert("영상 자르기 중 오류가 발생했습니다. 영상을 다시 업로드한 후 시도해보세요.");
+    } finally {
+      setIsClipping(null);
+    }
   };
 
   // 활성화된 자막으로 자동 스크롤
@@ -455,6 +521,13 @@ export default function Home() {
                 controls
                 onTimeUpdate={handleTimeUpdate}
               />
+              {currentOverlay && (
+                <div className="absolute bottom-12 w-full flex justify-center pointer-events-none px-4 z-10 transition-opacity">
+                  <div className="bg-black/75 text-white px-6 py-2 rounded-lg text-lg sm:text-xl md:text-2xl font-bold tracking-wide text-center drop-shadow-md border border-white/10">
+                    {currentOverlay}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -507,6 +580,15 @@ export default function Home() {
                         onChange={(e) => handleOriginalSubtitleEdit(sub.id, e.target.value)}
                         rows={2}
                       />
+                      <button
+                        onClick={() => handleClipVideo(sub.start, sub.end, sub.id)}
+                        disabled={isClipping !== null}
+                        title="이 구간 영상 자르기 (초고속 다운로드)"
+                        className={`shrink-0 p-2 rounded-md transition-colors h-fit mt-1
+                          ${isClipping === sub.id ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                      >
+                        {isClipping === sub.id ? <Loader2 size={16} className="animate-spin" /> : <Scissors size={16} />}
+                      </button>
                     </div>
                   );
                 })
@@ -579,6 +661,15 @@ export default function Home() {
                         onChange={(e) => handleSubtitleEdit(sub.id, e.target.value)}
                         rows={2}
                       />
+                      <button
+                        onClick={() => handleClipVideo(sub.start, sub.end, sub.id)}
+                        disabled={isClipping !== null}
+                        title="이 구간 영상 자르기 (초고속 다운로드)"
+                        className={`shrink-0 p-2 rounded-md transition-colors h-fit mt-1
+                          ${isClipping === sub.id ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                      >
+                        {isClipping === sub.id ? <Loader2 size={16} className="animate-spin" /> : <Scissors size={16} />}
+                      </button>
                     </div>
                   );
                 })
