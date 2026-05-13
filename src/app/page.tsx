@@ -1690,7 +1690,7 @@ export default function Home() {
 
                     {/* Divider */}
                     {columnCount === 2 && (
-                      <div className={`w-px shrink-0 ${page.items.length > 5 ? 'bg-[#ddd]' : 'bg-transparent'}`}></div>
+                      <div className={`w-0 shrink-0 border-l ${page.items.length > 5 ? 'border-[#ccc]' : 'border-transparent'}`}></div>
                     )}
 
                     {/* Right Column */}
@@ -1774,7 +1774,7 @@ export default function Home() {
 
                     {/* Divider */}
                     {columnCount === 2 && (
-                      <div className={`w-px shrink-0 ${page.items.length > 5 ? 'bg-[#ddd]' : 'bg-transparent'}`}></div>
+                      <div className={`w-0 shrink-0 border-l ${page.items.length > 5 ? 'border-[#ccc]' : 'border-transparent'}`}></div>
                     )}
 
                     {/* Right Column */}
