@@ -1689,14 +1689,14 @@ export default function Home() {
                     </div>
 
                     {/* Divider */}
-                    {columnCount === 2 && page.items.length > 5 && (
-                      <div className="w-px bg-[#ddd] shrink-0"></div>
+                    {columnCount === 2 && (
+                      <div className={`w-px shrink-0 ${page.items.length > 5 ? 'bg-[#ddd]' : 'bg-transparent'}`}></div>
                     )}
 
                     {/* Right Column */}
-                    {columnCount === 2 && page.items.length > 5 && (
+                    {columnCount === 2 && (
                       <div className="flex-1 flex flex-col">
-                        {page.items.slice(5, 10).map((q, localIdx) => {
+                        {page.items.length > 5 && page.items.slice(5, 10).map((q, localIdx) => {
                           const absoluteIdx = page.startIndex + 5 + localIdx;
                           return (
                             <div key={q.id} className="mb-8" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
@@ -1773,14 +1773,14 @@ export default function Home() {
                     </div>
 
                     {/* Divider */}
-                    {columnCount === 2 && page.items.length > 5 && (
-                      <div className="w-px bg-[#ddd] shrink-0"></div>
+                    {columnCount === 2 && (
+                      <div className={`w-px shrink-0 ${page.items.length > 5 ? 'bg-[#ddd]' : 'bg-transparent'}`}></div>
                     )}
 
                     {/* Right Column */}
-                    {columnCount === 2 && page.items.length > 5 && (
+                    {columnCount === 2 && (
                       <div className="flex-1 flex flex-col">
-                        {page.items.slice(5, 10).map((q, localIdx) => {
+                        {page.items.length > 5 && page.items.slice(5, 10).map((q, localIdx) => {
                           const absoluteIdx = page.startIndex + 5 + localIdx;
                           return (
                             <div key={q.id} className="mb-6" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
