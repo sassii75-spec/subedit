@@ -1582,10 +1582,11 @@ export default function Home() {
           </div>
           
           {/* Main Preview Area */}
-          <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-100 print:p-0 print:bg-white print:overflow-visible">
+          <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block">
+            
+            {/* 1. 문제지 페이지 */}
             <div 
-              id="quiz-print-area" 
-              className="bg-white shadow-xl border border-gray-200 p-[15mm] print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0"
+              className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0"
               style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif' }}
             >
               {/* Header */}
@@ -1631,31 +1632,42 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+            </div>
 
-              {/* Answers */}
-              {showAnswers && quizzes.filter(q => q.isSelected).length > 0 && (
-                <div className="break-before-page mt-12 pt-8 border-t-2 border-black" style={{ pageBreakBefore: 'always', breakBefore: 'page' }}>
-                  <h2 className="text-xl font-black mb-6 text-center">정답 및 해설</h2>
-                  <div 
-                    style={{ 
-                      columnCount: columnCount, 
-                      columnGap: '12mm',
-                      columnRule: columnCount === 2 ? '1px solid #ddd' : 'none'
-                    }}
-                  >
-                    {quizzes.filter(q => q.isSelected).map((q, idx) => (
-                      <div key={q.id} className="mb-6 break-inside-avoid" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                        <p className="font-bold text-black mb-2 text-[14px]">
-                          {idx + 1}번 정답: <span className="ml-1 underline underline-offset-2">{q.answer}</span>
-                        </p>
-                        <div className="text-black text-[13px] leading-relaxed">
-                          {q.explanation}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            {/* 2. 해설지 페이지 (새 페이지로 분리) */}
+            {showAnswers && quizzes.filter(q => q.isSelected).length > 0 && (
+              <div 
+                className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 break-before-page"
+                style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: 'always', breakBefore: 'page' }}
+              >
+                <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                  <h2 className="text-3xl font-black mb-2">정답 및 해설</h2>
+                  <div className="text-lg font-bold text-gray-600">{examTitle || '문제지 제목'}</div>
                 </div>
-              )}
+                <div 
+                  style={{ 
+                    columnCount: columnCount, 
+                    columnGap: '12mm',
+                    columnRule: columnCount === 2 ? '1px solid #ddd' : 'none'
+                  }}
+                >
+                  {quizzes.filter(q => q.isSelected).map((q, idx) => (
+                    <div key={q.id} className="mb-6 break-inside-avoid" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                      <p className="font-bold text-black mb-2 text-[14px]">
+                        {idx + 1}번 정답: <span className="ml-1 underline underline-offset-2">{q.answer}</span>
+                      </p>
+                      <div className="text-black text-[13px] leading-relaxed">
+                        {q.explanation}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* 인쇄용 고정 푸터 (인쇄 시 모든 페이지 하단에 출력됨) */}
+            <div className="hidden print:block fixed bottom-4 w-full text-center text-[11px] text-gray-500 font-bold" style={{ fontFamily: '"Batang", "KoPub Batang", serif' }}>
+              - {examTitle || '시험지'} -
             </div>
           </div>
         </div>
