@@ -123,7 +123,7 @@ export default function HistoryPage() {
   };
 
   // 언어명 매핑
-  const langMap: Record<string, string> = { 'en': '영어', 'zh': '중국어', 'ja': '일본어', 'vi': '베트남어' };
+  const langMap: Record<string, string> = { 'en': '영어', 'zh': '중국어', 'ja': '일본어', 'vi': '베트남어', 'my': '미얀마어', 'bn': '벵골어', 'sw': '스와힐리어' };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">

@@ -26,8 +26,9 @@ export async function POST(req: Request) {
       'zh': 'Chinese (Simplified)',
       'ja': 'Japanese',
       'vi': 'Vietnamese',
-      'my': 'Burmese',
-      'bn': 'Bengali'
+      'my': 'Burmese (Myanmar)',
+      'bn': 'Bengali',
+      'sw': 'Swahili'
     };
     
     const targetLangName = langMap[targetLanguage] || targetLanguage;
