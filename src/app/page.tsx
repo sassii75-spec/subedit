@@ -319,7 +319,7 @@ export default function Home() {
       const response = await fetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: fullTranscript, choiceCount: quizChoiceCount, questionCount: quizCount })
+        body: JSON.stringify({ transcript: fullTranscript, choiceCount: quizChoiceCount, questionCount: quizCount, timestamp: Date.now() })
       });
       
       const contentType = response.headers.get('content-type');
@@ -347,6 +347,22 @@ export default function Home() {
     } finally {
       setIsGeneratingQuiz(false);
       setProgressMsg('');
+    }
+  };
+
+  const handleSaveQuizToHistory = async () => {
+    if (quizzes.length === 0) return;
+    try {
+      await addDoc(collection(db, 'unicon_exams'), {
+        title: examTitle || '제목 없음',
+        subtitle: examSubtitle || '',
+        quizzes: quizzes,
+        createdAt: serverTimestamp(),
+      });
+      alert('시험지가 보관함에 저장되었습니다. 히스토리에서 확인할 수 있습니다.');
+    } catch (e: any) {
+      console.error(e);
+      alert('시험지 저장 중 오류가 발생했습니다: ' + e.message);
     }
   };
 
@@ -1560,6 +1576,12 @@ export default function Home() {
             </div>
             
             <div className="flex items-center gap-3">
+              <button 
+                onClick={handleSaveQuizToHistory}
+                className="px-4 py-2 text-sm font-bold text-purple-700 bg-purple-100 border border-purple-200 hover:bg-purple-200 rounded-lg transition-colors"
+              >
+                보관함에 저장
+              </button>
               <button 
                 onClick={() => setIsPreviewOpen(false)}
                 className="px-4 py-2 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"

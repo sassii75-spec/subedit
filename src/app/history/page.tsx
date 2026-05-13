@@ -15,10 +15,25 @@ interface SubtitleProject {
   createdAt: any;
 }
 
+interface ExamProject {
+  id: string;
+  title: string;
+  subtitle: string;
+  quizzes: any[];
+  createdAt: any;
+}
+
 export default function HistoryPage() {
+  const [activeTab, setActiveTab] = useState<'translations' | 'exams'>('translations');
   const [projects, setProjects] = useState<SubtitleProject[]>([]);
+  const [exams, setExams] = useState<ExamProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [previewProject, setPreviewProject] = useState<SubtitleProject | null>(null);
+
+  // 인쇄 전용 모달 상태
+  const [printExam, setPrintExam] = useState<ExamProject | null>(null);
+  const [printColumnCount, setPrintColumnCount] = useState<1 | 2>(2);
+  const [printShowAnswers, setPrintShowAnswers] = useState(true);
 
   const fetchHistory = async () => {
     try {
@@ -29,6 +44,14 @@ export default function HistoryPage() {
         data.push({ id: doc.id, ...doc.data() } as SubtitleProject);
       });
       setProjects(data);
+
+      const qExams = query(collection(db, 'unicon_exams'), orderBy('createdAt', 'desc'));
+      const examSnap = await getDocs(qExams);
+      const examData: ExamProject[] = [];
+      examSnap.forEach((doc) => {
+        examData.push({ id: doc.id, ...doc.data() } as ExamProject);
+      });
+      setExams(examData);
     } catch (err) {
       console.error('Error fetching history:', err);
     } finally {
@@ -40,11 +63,16 @@ export default function HistoryPage() {
     fetchHistory();
   }, []);
 
-  const handleDelete = async (id: string) => {
-    if (confirm('이 작업 내역을 삭제하시겠습니까?')) {
+  const handleDelete = async (id: string, isExam: boolean = false) => {
+    if (confirm('이 내역을 삭제하시겠습니까?')) {
       try {
-        await deleteDoc(doc(db, 'subedit_history', id));
-        setProjects(projects.filter(p => p.id !== id));
+        if (isExam) {
+          await deleteDoc(doc(db, 'unicon_exams', id));
+          setExams(exams.filter(e => e.id !== id));
+        } else {
+          await deleteDoc(doc(db, 'subedit_history', id));
+          setProjects(projects.filter(p => p.id !== id));
+        }
       } catch (err) {
         console.error('Error deleting doc:', err);
         alert('삭제 중 오류가 발생했습니다.');
@@ -127,29 +155,45 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
-      <header className="px-6 py-4 bg-white border-b border-gray-200 flex items-center shadow-sm sticky top-0 z-10">
+      <header className="px-6 py-4 bg-white border-b border-gray-200 flex items-center shadow-sm sticky top-0 z-10 print:hidden">
         <Link href="/" className="flex items-center text-gray-600 hover:text-gray-900 transition-colors mr-6">
           <ArrowLeft size={20} className="mr-2" />
           <span className="font-semibold">에디터로 돌아가기</span>
         </Link>
-        <h1 className="text-xl font-bold text-gray-800 tracking-tight border-l pl-6 border-gray-300">작업 내역 히스토리</h1>
+        <h1 className="text-xl font-bold text-gray-800 tracking-tight border-l pl-6 border-gray-300">작업 내역 보관함</h1>
+        
+        <div className="ml-8 flex bg-gray-100 p-1 rounded-lg">
+          <button 
+            onClick={() => setActiveTab('translations')}
+            className={`px-4 py-1.5 text-sm font-bold rounded-md transition-colors ${activeTab === 'translations' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            영상 번역 내역
+          </button>
+          <button 
+            onClick={() => setActiveTab('exams')}
+            className={`px-4 py-1.5 text-sm font-bold rounded-md transition-colors ${activeTab === 'exams' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            시험지 보관함
+          </button>
+        </div>
       </header>
 
-      <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-8 max-w-7xl mx-auto w-full print:p-0 print:max-w-none">
         {isLoading ? (
-          <div className="flex justify-center items-center h-64">
+          <div className="flex justify-center items-center h-64 print:hidden">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
-        ) : projects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-            <Languages size={48} className="mb-4 text-gray-300" />
-            <p className="text-lg">저장된 자막 작업 내역이 없습니다.</p>
-            <Link href="/" className="mt-4 text-blue-600 font-semibold hover:underline">새로운 자막 만들기</Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <div key={project.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+        ) : activeTab === 'translations' ? (
+          projects.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400 print:hidden">
+              <Languages size={48} className="mb-4 text-gray-300" />
+              <p className="text-lg">저장된 자막 작업 내역이 없습니다.</p>
+              <Link href="/" className="mt-4 text-blue-600 font-semibold hover:underline">새로운 자막 만들기</Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 print:hidden">
+              {projects.map((project) => (
+                <div key={project.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
                 <div className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <h2 className="text-lg font-bold text-gray-800 line-clamp-1 flex-1 mr-4" title={project.title}>
@@ -213,7 +257,7 @@ export default function HistoryPage() {
                     </div>
 
                     <button 
-                      onClick={() => handleDelete(project.id)}
+                      onClick={() => handleDelete(project.id, false)}
                       className="mt-1 flex justify-center items-center gap-1.5 py-2 border border-red-200 text-red-500 rounded-md hover:bg-red-50 transition-colors text-sm font-semibold"
                     >
                       <Trash2 size={16} /> 기록 삭제
@@ -223,6 +267,56 @@ export default function HistoryPage() {
               </div>
             ))}
           </div>
+          )
+        ) : (
+          /* 시험지 보관함 탭 */
+          exams.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400 print:hidden">
+              <List size={48} className="mb-4 text-purple-300" />
+              <p className="text-lg">보관된 시험지가 없습니다.</p>
+              <Link href="/" className="mt-4 text-purple-600 font-semibold hover:underline">영상 편집기에서 시험지 생성하기</Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 print:hidden">
+              {exams.map((exam) => (
+                <div key={exam.id} className="bg-white rounded-xl shadow-sm border border-purple-100 overflow-hidden hover:shadow-md transition-shadow">
+                  <div className="p-5 flex flex-col h-full">
+                    <div className="flex items-start justify-between mb-3">
+                      <h2 className="text-xl font-black text-purple-900 line-clamp-1 flex-1 mr-4" title={exam.title}>
+                        {exam.title || '제목 없음'}
+                      </h2>
+                      <span className="bg-purple-50 text-purple-700 text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap border border-purple-100">
+                        {exam.quizzes?.length || 0}문항
+                      </span>
+                    </div>
+                    {exam.subtitle && <p className="text-sm font-bold text-gray-500 mb-4 line-clamp-1">{exam.subtitle}</p>}
+                    
+                    <div className="flex items-center text-gray-400 text-sm mb-5">
+                      <Calendar size={14} className="mr-1.5" />
+                      {exam.createdAt?.seconds 
+                        ? new Date(exam.createdAt.seconds * 1000).toLocaleString() 
+                        : '날짜 정보 없음'}
+                    </div>
+
+                    <div className="flex flex-col gap-2 mt-auto">
+                      <button 
+                        onClick={() => setPrintExam(exam)}
+                        className="flex justify-center items-center gap-1.5 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-black transition-colors text-sm font-bold shadow-sm"
+                      >
+                        <Download size={16} /> 다시 인쇄하기 (PDF)
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(exam.id, true)}
+                        className="flex justify-center items-center gap-1.5 py-2 border border-red-200 text-red-500 rounded-lg hover:bg-red-50 transition-colors text-sm font-semibold"
+                      >
+                        <Trash2 size={16} /> 삭제
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
       </main>
 
@@ -280,6 +374,142 @@ export default function HistoryPage() {
           </div>
         </div>
       )}
+      {/* 시험지 다시 인쇄하기(미리보기) 모달 */}
+      {printExam && (
+        <div className="fixed inset-0 bg-gray-100 z-50 flex flex-col overflow-hidden print:bg-white">
+          <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm z-10 shrink-0 print:hidden">
+            <div className="flex items-center gap-6">
+              <h2 className="text-xl font-bold text-gray-800">보관함 시험지 인쇄</h2>
+              <div className="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-gray-700">레이아웃</span>
+                  <select 
+                    value={printColumnCount} 
+                    onChange={(e) => setPrintColumnCount(Number(e.target.value) as 1 | 2)}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm outline-none font-medium bg-white"
+                  >
+                    <option value={1}>1단 (기본)</option>
+                    <option value={2}>2단 (모의고사 폼)</option>
+                  </select>
+                </div>
+                <div className="w-px h-5 bg-gray-300"></div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                  <input type="checkbox" checked={printShowAnswers} onChange={(e) => setPrintShowAnswers(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+                  정답 및 해설 표시
+                </label>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setPrintExam(null)}
+                className="px-4 py-2 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                닫기
+              </button>
+              <button 
+                onClick={() => window.print()}
+                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm flex items-center gap-2"
+              >
+                PDF 출력 및 저장하기
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block">
+            {/* 1. 문제지 페이지 */}
+            <div 
+              className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0"
+              style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif' }}
+            >
+              <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                <h1 className="w-full text-center text-3xl font-black mb-2">{printExam.title || '제목 없음'}</h1>
+                <h2 className="w-full text-center text-lg font-bold text-gray-600">{printExam.subtitle || ''}</h2>
+              </div>
+
+              <div 
+                className="quiz-questions-container"
+                style={{ 
+                  columnCount: printColumnCount, 
+                  columnGap: '12mm',
+                  columnRule: printColumnCount === 2 ? '1px solid #ddd' : 'none'
+                }}
+              >
+                {printExam.quizzes.filter(q => q.isSelected).map((q, idx) => (
+                  <div key={q.id} className="mb-8" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                    <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
+                      <span className="mr-1">{idx + 1}.</span> {q.question}
+                    </p>
+                    <div className="space-y-2 pl-4">
+                      {q.choices.map((choice: string, cIdx: number) => (
+                        <div key={cIdx} className="flex gap-2 text-black text-[14px]">
+                          <span className="shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
+                          <span>{choice}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. 해설지 페이지 (새 페이지로 분리) */}
+            {printShowAnswers && printExam.quizzes.filter(q => q.isSelected).length > 0 && (
+              <div 
+                className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 break-before-page"
+                style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: 'always', breakBefore: 'page' }}
+              >
+                <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                  <h2 className="text-3xl font-black mb-2">정답 및 해설</h2>
+                  <div className="text-lg font-bold text-gray-600">{printExam.title || '문제지 제목'}</div>
+                </div>
+                <div 
+                  style={{ 
+                    columnCount: printColumnCount, 
+                    columnGap: '12mm',
+                    columnRule: printColumnCount === 2 ? '1px solid #ddd' : 'none'
+                  }}
+                >
+                  {printExam.quizzes.filter(q => q.isSelected).map((q, idx) => (
+                    <div key={q.id} className="mb-6" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                      <p className="font-bold text-black mb-2 text-[14px]">
+                        {idx + 1}번 정답: <span className="ml-1 underline underline-offset-2">{q.answer}</span>
+                      </p>
+                      <div className="text-black text-[13px] leading-relaxed">
+                        {q.explanation}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* 인쇄용 고정 푸터 */}
+            <div className="hidden print:block fixed bottom-4 w-full text-center text-[11px] text-gray-500 font-bold" style={{ fontFamily: '"Batang", "KoPub Batang", serif' }}>
+              - {printExam.title || '시험지'} -
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Styles */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .print\\:block, .print\\:block * {
+            visibility: visible;
+          }
+          .print\\:bg-white {
+            background-color: white !important;
+          }
+          .break-before-page {
+            page-break-before: always !important;
+            break-before: page !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

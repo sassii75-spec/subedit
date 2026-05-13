@@ -10,7 +10,7 @@ const openai = new OpenAI({
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { transcript, choiceCount, questionCount } = body;
+    const { transcript, choiceCount, questionCount, timestamp } = body;
 
     if (!transcript) {
       return NextResponse.json({ error: '대본 데이터가 없습니다.' }, { status: 400 });
@@ -23,7 +23,11 @@ export async function POST(req: Request) {
     const optionsCount = choiceCount === 5 ? 5 : 4;
     const qCount = questionCount ? parseInt(questionCount) : 5;
 
-    const systemPrompt = `You are an expert educator. Your task is to read the provided video transcript and generate exactly ${qCount} multiple-choice questions based on its key concepts.
+    const systemPrompt = `You are an expert educator. Your task is to read the provided video transcript and generate EXACTLY ${qCount} multiple-choice questions based on its key concepts.
+CRITICAL REQUIREMENT: You MUST generate exactly ${qCount} questions. No more, no less. If you generate ${qCount - 1} or ${qCount + 1}, it is a catastrophic failure.
+
+To ensure maximum variety, a random timestamp seed [${timestamp || Date.now()}] is provided. You MUST randomly select different segments, topics, or angles from the transcript to generate unique questions each time. Do not repeatedly focus on the same facts.
+
 Each question MUST have exactly ${optionsCount} choices.
 The output MUST be a valid JSON object with a single key "quizzes" containing an array of exactly ${qCount} objects.
 Each object must follow this format:
@@ -42,7 +46,7 @@ Do not use markdown wrappers like \`\`\`json. Return only the raw JSON string.`;
         { role: "user", content: `Transcript:\n\n${transcript}` }
       ],
       response_format: { type: "json_object" },
-      temperature: 0.7,
+      temperature: 0.9,
     });
 
     const content = response.choices[0].message.content;
