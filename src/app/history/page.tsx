@@ -423,75 +423,120 @@ export default function HistoryPage() {
           </div>
           
           <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block">
-            {/* 1. 문제지 페이지 */}
-            <div 
-              className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0"
-              style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif' }}
-            >
-              <div className="mb-8 border-b-2 border-black pb-4 text-center">
-                <h1 className="w-full text-center text-3xl font-black mb-2">{printExam.title || '제목 없음'}</h1>
-                <h2 className="w-full text-center text-lg font-bold text-gray-600">{printExam.subtitle || ''}</h2>
-              </div>
-
-              <div 
-                className="quiz-questions-container"
-                style={{ 
-                  columnCount: printColumnCount, 
-                  columnGap: '12mm',
-                  columnRule: printColumnCount === 2 ? '1px solid #ddd' : 'none'
-                }}
-              >
-                {printExam.quizzes.filter(q => q.isSelected).map((q, idx) => (
-                  <div key={q.id} className="mb-8" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                    <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
-                      <span className="mr-1">{idx + 1}.</span> {q.question}
-                      {printShowTranslatedQuestion && q.questionTranslated && (
-                        <span className="block text-[13px] font-normal text-gray-600 mt-1 leading-snug">{q.questionTranslated}</span>
-                      )}
-                    </p>
-                    <div className="space-y-2 pl-4">
-                      {q.choices.map((choice: string, cIdx: number) => (
-                        <div key={cIdx} className="flex gap-2 text-black text-[14px]">
-                          <span className="shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
-                          <span>{choice}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 2. 해설지 페이지 (새 페이지로 분리) */}
-            {printShowAnswers && printExam.quizzes.filter(q => q.isSelected).length > 0 && (
-              <div 
-                className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 break-before-page"
-                style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: 'always', breakBefore: 'page' }}
-              >
-                <div className="mb-8 border-b-2 border-black pb-4 text-center">
-                  <h2 className="text-3xl font-black mb-2">정답 및 해설</h2>
-                  <div className="text-lg font-bold text-gray-600">{printExam.title || '문제지 제목'}</div>
-                </div>
+            {/* 1. 문제지 페이지 (페이지 분할 적용) */}
+            {(() => {
+              const selectedQuizzes = printExam.quizzes.filter(q => q.isSelected);
+              const chunkSize = printColumnCount === 2 ? 10 : 6;
+              const pages = [];
+              for (let i = 0; i < selectedQuizzes.length; i += chunkSize) {
+                pages.push({ items: selectedQuizzes.slice(i, i + chunkSize), startIndex: i });
+              }
+              
+              return pages.map((page, pageIdx) => (
                 <div 
-                  style={{ 
-                    columnCount: printColumnCount, 
-                    columnGap: '12mm',
-                    columnRule: printColumnCount === 2 ? '1px solid #ddd' : 'none'
-                  }}
+                  key={`history-quiz-page-${pageIdx}`}
+                  className={`bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 relative ${pageIdx > 0 ? 'break-before-page' : ''}`}
+                  style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: pageIdx > 0 ? 'always' : 'auto', breakBefore: pageIdx > 0 ? 'page' : 'auto' }}
                 >
-                  {printExam.quizzes.filter(q => q.isSelected).map((q, idx) => (
-                    <div key={q.id} className="mb-6" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                      <p className="font-bold text-black mb-2 text-[14px]">
-                        {idx + 1}번 정답: <span className="ml-1 underline underline-offset-2">{q.answer}</span>
-                      </p>
-                      <div className="text-black text-[13px] leading-relaxed">
-                        {q.explanation}
-                      </div>
+                  {/* Header */}
+                  {pageIdx === 0 && (
+                    <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                      <h1 className="w-full text-center text-3xl font-black mb-2">{printExam.title || '제목 없음'}</h1>
+                      <h2 className="w-full text-center text-lg font-bold text-gray-600">{printExam.subtitle || ''}</h2>
                     </div>
-                  ))}
+                  )}
+
+                  <div 
+                    className="quiz-questions-container"
+                    style={{ 
+                      columnCount: printColumnCount, 
+                      columnGap: '12mm',
+                      columnRule: printColumnCount === 2 ? '1px solid #ddd' : 'none'
+                    }}
+                  >
+                    {page.items.map((q, localIdx) => {
+                      const absoluteIdx = page.startIndex + localIdx;
+                      return (
+                        <div key={q.id} className="mb-8" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                          <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
+                            <span className="mr-1">{absoluteIdx + 1}.</span> {q.question}
+                            {printShowTranslatedQuestion && q.questionTranslated && (
+                              <span className="block text-[13px] font-normal text-gray-600 mt-1 leading-snug">{q.questionTranslated}</span>
+                            )}
+                          </p>
+                          <div className="space-y-2 pl-4">
+                            {q.choices.map((choice: string, cIdx: number) => (
+                              <div key={cIdx} className="flex gap-2 text-black text-[14px]">
+                                <span className="shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
+                                <span>{choice}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* 하단 페이지 번호 (인쇄 시에만 표시) */}
+                  <div className="hidden print:block absolute bottom-4 w-full text-center text-[12px] text-gray-500 font-bold left-0">
+                    - {pageIdx + 1} -
+                  </div>
                 </div>
-              </div>
-            )}
+              ));
+            })()}
+
+            {/* 2. 해설지 페이지 (새 페이지로 분리 및 분할) */}
+            {(() => {
+              if (!printShowAnswers) return null;
+              const selectedQuizzes = printExam.quizzes.filter(q => q.isSelected);
+              if (selectedQuizzes.length === 0) return null;
+              
+              const chunkSize = printColumnCount === 2 ? 10 : 6;
+              const pages = [];
+              for (let i = 0; i < selectedQuizzes.length; i += chunkSize) {
+                pages.push({ items: selectedQuizzes.slice(i, i + chunkSize), startIndex: i });
+              }
+              
+              return pages.map((page, pageIdx) => (
+                <div 
+                  key={`history-answer-page-${pageIdx}`}
+                  className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 break-before-page relative"
+                  style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: 'always', breakBefore: 'page' }}
+                >
+                  {pageIdx === 0 && (
+                    <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                      <h2 className="text-3xl font-black mb-2">정답 및 해설</h2>
+                      <div className="text-lg font-bold text-gray-600">{printExam.title || '문제지 제목'}</div>
+                    </div>
+                  )}
+                  <div 
+                    style={{ 
+                      columnCount: printColumnCount, 
+                      columnGap: '12mm',
+                      columnRule: printColumnCount === 2 ? '1px solid #ddd' : 'none'
+                    }}
+                  >
+                    {page.items.map((q, localIdx) => {
+                      const absoluteIdx = page.startIndex + localIdx;
+                      return (
+                        <div key={q.id} className="mb-6" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                          <div className="font-bold text-black mb-1 flex gap-2">
+                            <span className="bg-black text-white w-5 h-5 flex items-center justify-center rounded-full text-xs shrink-0">{absoluteIdx + 1}</span>
+                            <span>정답: {q.answer}</span>
+                          </div>
+                          <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">
+                            {q.explanation}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="hidden print:block absolute bottom-4 w-full text-center text-[12px] text-gray-500 font-bold left-0">
+                    - 정답 {pageIdx + 1} -
+                  </div>
+                </div>
+              ));
+            })()}
             
             {/* 인쇄용 고정 푸터 */}
             <div className="hidden print:block fixed bottom-4 w-full text-center text-[11px] text-gray-500 font-bold" style={{ fontFamily: '"Batang", "KoPub Batang", serif' }}>
