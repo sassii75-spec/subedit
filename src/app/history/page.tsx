@@ -422,7 +422,7 @@ export default function HistoryPage() {
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block">
+          <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block print:relative print:w-full">
             {/* 1. 문제지 페이지 (페이지 분할 적용) */}
             {(() => {
               const selectedQuizzes = printExam.quizzes.filter(q => q.isSelected);
@@ -607,6 +607,7 @@ export default function HistoryPage() {
           .overflow-hidden { overflow: visible !important; }
           .overflow-y-auto { overflow: visible !important; }
           .h-screen { height: auto !important; }
+          .fixed { position: absolute !important; }
 
           .print\\:block, .print\\:block * {
             visibility: visible;

@@ -1624,7 +1624,7 @@ export default function Home() {
           </div>
           
           {/* Main Preview Area */}
-          <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block">
+          <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block print:relative print:w-full">
             
             {/* 1. 문제지 페이지 (페이지 분할 적용) */}
             {(() => {
@@ -1822,6 +1822,7 @@ export default function Home() {
           .flex-col.h-screen { height: auto; }
           .overflow-hidden { overflow: visible !important; }
           .overflow-y-auto { overflow: visible !important; }
+          .fixed { position: absolute !important; }
           
           /* 프린트 영역과 그 자식들만 보이게 처리 */
           #quiz-print-area, #quiz-print-area * {
