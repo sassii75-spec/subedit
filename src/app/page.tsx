@@ -1344,7 +1344,7 @@ export default function Home() {
       {/* 시험지(퀴즈) 출제 모달 */}
       {isQuizEditorOpen && (
         <div className="fixed inset-0 bg-black/60 z-[40] flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-xl shadow-xl w-[95vw] max-w-[1400px] h-[90vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
               <div className="flex items-center gap-3">
                 <BookOpen size={24} className="text-purple-600" />
