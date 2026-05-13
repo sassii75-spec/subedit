@@ -62,6 +62,12 @@ export default function Home() {
   const [isManualClipping, setIsManualClipping] = useState(false);
   const [isFullDownloading, setIsFullDownloading] = useState(false);
   
+  // 퀴즈(시험지) 탭 상태
+  const [activeRightTab, setActiveRightTab] = useState<'translation' | 'quiz'>('translation');
+  const [quizChoiceCount, setQuizChoiceCount] = useState<4 | 5>(4);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [quizzes, setQuizzes] = useState<{question: string, choices: string[], answer: string, explanation: string}[]>([]);
+  
   // 실시간 더빙 상태
   const [isLiveDubbing, setIsLiveDubbing] = useState(false);
   
@@ -281,6 +287,45 @@ export default function Home() {
       }));
       return updated;
     });
+  };
+
+  const handleGenerateQuiz = async () => {
+    if (originalSubtitles.length === 0) {
+      alert('원본 자막 대본이 없습니다. 영상을 먼저 업로드해주세요.');
+      return;
+    }
+    setIsGeneratingQuiz(true);
+    setProgressMsg('AI 시험지 출제 중...');
+    
+    try {
+      const fullTranscript = originalSubtitles.map(s => s.text).join(' ');
+      const response = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: fullTranscript, choiceCount: quizChoiceCount })
+      });
+      
+      const contentType = response.headers.get('content-type');
+      let result;
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        throw new Error(`퀴즈 API 오류 (${response.status}): ${text.substring(0, 100)}`);
+      }
+
+      if (!response.ok) throw new Error(result.error || '시험지 생성 실패');
+      
+      if (result.quizzes) {
+        setQuizzes(result.quizzes);
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('시험지 생성 중 오류가 발생했습니다: ' + e.message);
+    } finally {
+      setIsGeneratingQuiz(false);
+      setProgressMsg('');
+    }
   };
 
   const handleSaveToHistory = async () => {
@@ -1115,8 +1160,26 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Right Pane: Translation Editor */}
-          <div className="flex flex-col w-1/2 bg-white z-0">
+          {/* Right Pane: Translation Editor & Quiz Generator */}
+          <div className="flex flex-col w-1/2 bg-white z-0 relative">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 bg-white shadow-sm z-10 print:hidden">
+              <button
+                onClick={() => setActiveRightTab('translation')}
+                className={`flex-1 py-3 text-sm font-bold transition-colors ${activeRightTab === 'translation' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/30' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`}
+              >
+                자막 번역
+              </button>
+              <button
+                onClick={() => setActiveRightTab('quiz')}
+                className={`flex-1 py-3 text-sm font-bold transition-colors ${activeRightTab === 'quiz' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/30' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`}
+              >
+                시험지(퀴즈) 생성
+              </button>
+            </div>
+
+            {/* Translation Tab Content */}
+            <div className={`flex-col h-full overflow-hidden ${activeRightTab === 'translation' ? 'flex' : 'hidden'} print:hidden`}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 shadow-sm">
               <div className="flex items-center gap-3">
                 <Languages size={18} className="text-blue-600" />
@@ -1232,6 +1295,87 @@ export default function Home() {
                 })
               )}
             </div>
+            {/* Translation Tab Content 끝 */}
+            </div>
+
+            {/* Quiz Tab Content 시작 */}
+            <div className={`flex-col h-full overflow-hidden ${activeRightTab === 'quiz' ? 'flex' : 'hidden'} print:flex`}>
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 shadow-sm print:hidden">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-bold text-gray-800">문항 형식:</span>
+                  <label className="flex items-center gap-1.5 text-sm cursor-pointer text-gray-700 hover:text-blue-600">
+                    <input type="radio" name="choiceCount" value={4} checked={quizChoiceCount === 4} onChange={() => setQuizChoiceCount(4)} className="accent-blue-600" />
+                    <span className="font-medium">4지선다</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 text-sm cursor-pointer text-gray-700 hover:text-blue-600">
+                    <input type="radio" name="choiceCount" value={5} checked={quizChoiceCount === 5} onChange={() => setQuizChoiceCount(5)} className="accent-blue-600" />
+                    <span className="font-medium">5지선다</span>
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleGenerateQuiz}
+                    disabled={isGeneratingQuiz}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border rounded transition-colors text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shadow-sm"
+                  >
+                    {isGeneratingQuiz && <Loader2 size={14} className="animate-spin" />}
+                    {isGeneratingQuiz ? '시험지 출제 중...' : '영상 내용으로 시험지 생성'}
+                  </button>
+                  {quizzes.length > 0 && (
+                    <button 
+                      onClick={() => window.print()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border rounded transition-colors text-white bg-gray-800 hover:bg-gray-900 shadow-sm"
+                    >
+                      시험지 PDF로 저장
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 print:p-0 print:overflow-visible" id="quiz-print-area">
+                {quizzes.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-gray-400 flex-col gap-2 print:hidden">
+                    <p>원본 영상 대본을 기반으로 핵심 내용을 퀴즈로 만들어줍니다.</p>
+                    <p className="text-xs">상단의 [영상 내용으로 시험지 생성] 버튼을 클릭하세요.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white print:bg-transparent max-w-3xl mx-auto">
+                    <div className="quiz-questions">
+                      <h2 className="text-2xl font-black mb-8 pb-3 border-b-2 border-black text-center print:text-left tracking-tight">강의 내용 복습 시험지</h2>
+                      {quizzes.map((q, idx) => (
+                        <div key={idx} className="mb-10 break-inside-avoid">
+                          <p className="font-bold text-gray-900 mb-4 text-[16px] leading-relaxed">
+                            <span className="mr-1">{idx + 1}.</span> {q.question}
+                          </p>
+                          <div className="space-y-3 pl-5">
+                            {q.choices.map((choice, cIdx) => (
+                              <div key={cIdx} className="flex gap-3 text-gray-800 text-[15px]">
+                                <span className="font-bold shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
+                                <span>{choice}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* 정답 및 해설 (새 페이지에 출력되도록 설정) */}
+                    <div className="quiz-answers break-before-page mt-16 pt-10 border-t-2 border-gray-300">
+                      <h2 className="text-xl font-black mb-8 text-center print:text-left">정답 및 해설</h2>
+                      {quizzes.map((q, idx) => (
+                        <div key={idx} className="mb-8 break-inside-avoid">
+                          <p className="font-bold text-gray-900 mb-2 text-[15px]">
+                            {idx + 1}번 정답: <span className="text-blue-600 ml-1">{q.answer}</span>
+                          </p>
+                          <div className="text-gray-700 text-[14px] bg-gray-50 p-4 rounded-lg border border-gray-100 print:border-none print:bg-transparent print:p-0 leading-relaxed">
+                            {q.explanation}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1307,6 +1451,42 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Print Styles for PDF Export */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          /* 전체 레이아웃 리셋 */
+          .flex-col.h-screen { height: auto; }
+          .overflow-hidden { overflow: visible !important; }
+          .overflow-y-auto { overflow: visible !important; }
+          
+          /* 프린트 영역과 그 자식들만 보이게 처리 */
+          #quiz-print-area, #quiz-print-area * {
+            visibility: visible;
+          }
+          #quiz-print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 15mm;
+            background: white;
+          }
+          
+          .break-before-page {
+            page-break-before: always;
+            break-before: page;
+          }
+          .break-inside-avoid {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+        }
+      `}</style>
     </div>
   );
 }
