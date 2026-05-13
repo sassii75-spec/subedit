@@ -34,6 +34,7 @@ export default function HistoryPage() {
   const [printExam, setPrintExam] = useState<ExamProject | null>(null);
   const [printColumnCount, setPrintColumnCount] = useState<1 | 2>(2);
   const [printShowAnswers, setPrintShowAnswers] = useState(true);
+  const [printShowTranslatedQuestion, setPrintShowTranslatedQuestion] = useState(true);
 
   const fetchHistory = async () => {
     try {
@@ -397,6 +398,11 @@ export default function HistoryPage() {
                   <input type="checkbox" checked={printShowAnswers} onChange={(e) => setPrintShowAnswers(e.target.checked)} className="w-4 h-4 accent-blue-600" />
                   정답 및 해설 표시
                 </label>
+                <div className="w-px h-5 bg-gray-300"></div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                  <input type="checkbox" checked={printShowTranslatedQuestion} onChange={(e) => setPrintShowTranslatedQuestion(e.target.checked)} className="w-4 h-4 accent-purple-600" />
+                  발문 번역 표시
+                </label>
               </div>
             </div>
             
@@ -439,6 +445,9 @@ export default function HistoryPage() {
                   <div key={q.id} className="mb-8" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                     <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
                       <span className="mr-1">{idx + 1}.</span> {q.question}
+                      {printShowTranslatedQuestion && q.questionTranslated && (
+                        <span className="block text-[13px] font-normal text-gray-600 mt-1 leading-snug">{q.questionTranslated}</span>
+                      )}
                     </p>
                     <div className="space-y-2 pl-4">
                       {q.choices.map((choice: string, cIdx: number) => (

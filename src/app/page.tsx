@@ -15,6 +15,7 @@ export type QuizItem = {
   answer: string;
   explanation: string;
   isSelected: boolean;
+  questionTranslated?: string;
 };
 
 // 초 단위(float)를 HH:MM:SS 형식으로 변환하는 헬퍼 함수
@@ -73,17 +74,19 @@ export default function Home() {
   
   // 퀴즈(시험지) 상태
   const [isQuizEditorOpen, setIsQuizEditorOpen] = useState(false);
-  const [quizChoiceCount, setQuizChoiceCount] = useState<4 | 5>(4);
   const [quizCount, setQuizCount] = useState<number>(5);
+  const [quizChoiceCount, setQuizChoiceCount] = useState<4 | 5>(4);
+  const [quizTargetLang, setQuizTargetLang] = useState<string>('none');
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
   
   // 시험지 미리보기 팝업 상태
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [examTitle, setExamTitle] = useState('문제지 제목 입력');
-  const [examSubtitle, setExamSubtitle] = useState('');
+  const [examSubtitle, setExamSubtitle] = useState(''); 
   const [columnCount, setColumnCount] = useState<1 | 2>(2);
   const [showAnswers, setShowAnswers] = useState(true);
+  const [printShowTranslatedQuestion, setPrintShowTranslatedQuestion] = useState(true);
   
   // 실시간 더빙 상태
   const [isLiveDubbing, setIsLiveDubbing] = useState(false);
@@ -319,7 +322,7 @@ export default function Home() {
       const response = await fetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: fullTranscript, choiceCount: quizChoiceCount, questionCount: quizCount, timestamp: Date.now() })
+        body: JSON.stringify({ transcript: fullTranscript, choiceCount: quizChoiceCount, questionCount: quizCount, timestamp: Date.now(), targetLang: quizTargetLang })
       });
       
       const contentType = response.headers.get('content-type');
@@ -1371,6 +1374,24 @@ export default function Home() {
                 
                 <div className="w-px h-5 bg-gray-300 mx-2" />
                 
+                <span className="text-sm font-bold text-gray-800">발문 번역:</span>
+                <select 
+                  value={quizTargetLang}
+                  onChange={(e) => setQuizTargetLang(e.target.value)}
+                  className="text-sm font-bold text-gray-700 bg-white border border-gray-200 rounded px-2 py-1 outline-none cursor-pointer"
+                >
+                  <option value="none">번역 안 함</option>
+                  <option value="en">영어 (English)</option>
+                  <option value="zh">중국어 (中文)</option>
+                  <option value="ja">일본어 (日本語)</option>
+                  <option value="vi">베트남어 (Tiếng Việt)</option>
+                  <option value="my">미얀마어 (မြန်မာစာ)</option>
+                  <option value="bn">벵골어 (বাংলা)</option>
+                  <option value="sw">스와힐리어 (Kiswahili)</option>
+                </select>
+                
+                <div className="w-px h-5 bg-gray-300 mx-2" />
+                
                 <button 
                   onClick={handleGenerateQuiz}
                   disabled={isGeneratingQuiz}
@@ -1572,6 +1593,11 @@ export default function Home() {
                   <input type="checkbox" checked={showAnswers} onChange={(e) => setShowAnswers(e.target.checked)} className="w-4 h-4 accent-blue-600" />
                   정답 및 해설 표시
                 </label>
+                <div className="w-px h-5 bg-gray-300"></div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                  <input type="checkbox" checked={printShowTranslatedQuestion} onChange={(e) => setPrintShowTranslatedQuestion(e.target.checked)} className="w-4 h-4 accent-purple-600" />
+                  발문 번역 표시
+                </label>
               </div>
             </div>
             
@@ -1636,6 +1662,9 @@ export default function Home() {
                   <div key={q.id} className="mb-8" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                     <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
                       <span className="mr-1">{idx + 1}.</span> {q.question}
+                      {printShowTranslatedQuestion && q.questionTranslated && (
+                        <span className="block text-[13px] font-normal text-gray-600 mt-1 leading-snug">{q.questionTranslated}</span>
+                      )}
                     </p>
                     <div className="space-y-2 pl-4">
                       {q.choices.map((choice, cIdx) => (

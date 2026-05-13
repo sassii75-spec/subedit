@@ -10,7 +10,7 @@ const openai = new OpenAI({
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { transcript, choiceCount, questionCount, timestamp } = body;
+    const { transcript, choiceCount, questionCount, timestamp, targetLang } = body;
 
     if (!transcript) {
       return NextResponse.json({ error: '대본 데이터가 없습니다.' }, { status: 400 });
@@ -23,6 +23,19 @@ export async function POST(req: Request) {
     const optionsCount = choiceCount === 5 ? 5 : 4;
     const qCount = questionCount ? parseInt(questionCount) : 5;
 
+    // 언어명 매핑 (발문 번역용)
+    const langMap: Record<string, string> = {
+      'en': 'English',
+      'zh': 'Chinese (Simplified)',
+      'ja': 'Japanese',
+      'vi': 'Vietnamese',
+      'my': 'Burmese (Myanmar)',
+      'bn': 'Bengali',
+      'sw': 'Swahili'
+    };
+    
+    const targetLangName = targetLang && targetLang !== 'none' ? langMap[targetLang] || targetLang : null;
+
     const systemPrompt = `You are an expert educator. Your task is to read the provided video transcript and generate EXACTLY ${qCount} multiple-choice questions based on its key concepts.
 CRITICAL REQUIREMENT: You MUST generate exactly ${qCount} questions. No more, no less. If you generate ${qCount - 1} or ${qCount + 1}, it is a catastrophic failure.
 
@@ -32,7 +45,7 @@ Each question MUST have exactly ${optionsCount} choices.
 The output MUST be a valid JSON object with a single key "quizzes" containing an array of exactly ${qCount} objects.
 Each object must follow this format:
 {
-  "question": "The question text in Korean",
+  "question": "The question text in Korean",${targetLangName ? `\n  "questionTranslated": "The question text translated into ${targetLangName}",` : ''}
   "choices": ["Choice 1", "Choice 2", "Choice 3", "Choice 4"${optionsCount === 5 ? ', "Choice 5"' : ''}],
   "answer": "The exact string of the correct choice from the choices array",
   "explanation": "A brief explanation in Korean of why this is the correct answer"
