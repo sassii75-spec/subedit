@@ -920,18 +920,7 @@ export default function Home() {
           <Link href="/history" className="text-sm font-semibold text-gray-600 hover:text-blue-600 mr-2 transition-colors">
             히스토리 보기
           </Link>
-          <button 
-            onClick={toggleLiveDubbing}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              isLiveDubbing 
-                ? 'bg-purple-100 text-purple-700 border border-purple-200 hover:bg-purple-200' 
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-            title="재생 시 번역된 자막을 기기의 내장 AI 음성으로 실시간으로 읽어줍니다."
-          >
-            {isLiveDubbing ? <Volume2 size={16} /> : <VolumeX size={16} />} 
-            {isLiveDubbing ? '실시간 더빙 켬' : '실시간 더빙 끔'}
-          </button>
+
 
           <button 
             onClick={() => setIsLiveMode(true)}
@@ -1618,7 +1607,7 @@ export default function Home() {
                 }}
               >
                 {quizzes.filter(q => q.isSelected).map((q, idx) => (
-                  <div key={q.id} className="mb-8 break-inside-avoid" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                  <div key={q.id} className="mb-8" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                     <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
                       <span className="mr-1">{idx + 1}.</span> {q.question}
                     </p>
@@ -1653,7 +1642,7 @@ export default function Home() {
                   }}
                 >
                   {quizzes.filter(q => q.isSelected).map((q, idx) => (
-                    <div key={q.id} className="mb-6 break-inside-avoid" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                    <div key={q.id} className="mb-6" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
                       <p className="font-bold text-black mb-2 text-[14px]">
                         {idx + 1}번 정답: <span className="ml-1 underline underline-offset-2">{q.answer}</span>
                       </p>
