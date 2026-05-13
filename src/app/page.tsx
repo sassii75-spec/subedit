@@ -1661,36 +1661,64 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Questions Container */}
-                  <div 
-                    className="quiz-questions-container"
-                    style={{ 
-                      columnCount: columnCount, 
-                      columnGap: '12mm',
-                      columnRule: columnCount === 2 ? '1px solid #ddd' : 'none'
-                    }}
-                  >
-                    {page.items.map((q, localIdx) => {
-                      const absoluteIdx = page.startIndex + localIdx;
-                      return (
-                        <div key={q.id} className="mb-8" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                          <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
-                            <span className="mr-1">{absoluteIdx + 1}.</span> {q.question}
-                            {printShowTranslatedQuestion && q.questionTranslated && (
-                              <span className="block text-[13px] font-normal text-gray-600 mt-1 leading-snug">{q.questionTranslated}</span>
-                            )}
-                          </p>
-                          <div className="space-y-2 pl-4">
-                            {q.choices.map((choice, cIdx) => (
-                              <div key={cIdx} className="flex gap-2 text-black text-[14px]">
-                                <span className="shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
-                                <span>{choice}</span>
-                              </div>
-                            ))}
+                  {/* Questions Container (Flexbox 2단) */}
+                  <div className={`flex ${columnCount === 2 ? 'gap-[12mm]' : 'flex-col'}`}>
+                    {/* Left Column (또는 1단 전체) */}
+                    <div className="flex-1 flex flex-col">
+                      {(columnCount === 2 ? page.items.slice(0, 5) : page.items).map((q, localIdx) => {
+                        const absoluteIdx = page.startIndex + localIdx;
+                        return (
+                          <div key={q.id} className="mb-8" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                            <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
+                              <span className="mr-1">{absoluteIdx + 1}.</span> {q.question}
+                              {printShowTranslatedQuestion && q.questionTranslated && (
+                                <span className="block text-[13px] font-normal text-gray-600 mt-1 leading-snug">{q.questionTranslated}</span>
+                              )}
+                            </p>
+                            <div className="space-y-2 pl-4">
+                              {q.choices.map((choice, cIdx) => (
+                                <div key={cIdx} className="flex gap-2 text-black text-[14px]">
+                                  <span className="shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
+                                  <span>{choice}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+
+                    {/* Divider */}
+                    {columnCount === 2 && page.items.length > 5 && (
+                      <div className="w-px bg-[#ddd] shrink-0"></div>
+                    )}
+
+                    {/* Right Column */}
+                    {columnCount === 2 && page.items.length > 5 && (
+                      <div className="flex-1 flex flex-col">
+                        {page.items.slice(5, 10).map((q, localIdx) => {
+                          const absoluteIdx = page.startIndex + 5 + localIdx;
+                          return (
+                            <div key={q.id} className="mb-8" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                              <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
+                                <span className="mr-1">{absoluteIdx + 1}.</span> {q.question}
+                                {printShowTranslatedQuestion && q.questionTranslated && (
+                                  <span className="block text-[13px] font-normal text-gray-600 mt-1 leading-snug">{q.questionTranslated}</span>
+                                )}
+                              </p>
+                              <div className="space-y-2 pl-4">
+                                {q.choices.map((choice, cIdx) => (
+                                  <div key={cIdx} className="flex gap-2 text-black text-[14px]">
+                                    <span className="shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
+                                    <span>{choice}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   
                   {/* 하단 페이지 번호 (인쇄 시에만 표시) */}
@@ -1725,27 +1753,49 @@ export default function Home() {
                       <div className="text-lg font-bold text-gray-600">{examTitle || '문제지 제목'}</div>
                     </div>
                   )}
-                  <div 
-                    style={{ 
-                      columnCount: columnCount, 
-                      columnGap: '12mm',
-                      columnRule: columnCount === 2 ? '1px solid #ddd' : 'none'
-                    }}
-                  >
-                    {page.items.map((q, localIdx) => {
-                      const absoluteIdx = page.startIndex + localIdx;
-                      return (
-                        <div key={q.id} className="mb-6" style={{ display: 'inline-block', width: '100%', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-                          <div className="font-bold text-black mb-1 flex gap-2">
-                            <span className="bg-black text-white w-5 h-5 flex items-center justify-center rounded-full text-xs shrink-0">{absoluteIdx + 1}</span>
-                            <span>정답: {q.answer}</span>
+                  <div className={`flex ${columnCount === 2 ? 'gap-[12mm]' : 'flex-col'}`}>
+                    {/* Left Column */}
+                    <div className="flex-1 flex flex-col">
+                      {(columnCount === 2 ? page.items.slice(0, 5) : page.items).map((q, localIdx) => {
+                        const absoluteIdx = page.startIndex + localIdx;
+                        return (
+                          <div key={q.id} className="mb-6" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                            <div className="font-bold text-black mb-1 flex gap-2">
+                              <span className="bg-black text-white w-5 h-5 flex items-center justify-center rounded-full text-xs shrink-0">{absoluteIdx + 1}</span>
+                              <span>정답: {q.answer}</span>
+                            </div>
+                            <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">
+                              {q.explanation}
+                            </p>
                           </div>
-                          <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">
-                            {q.explanation}
-                          </p>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+
+                    {/* Divider */}
+                    {columnCount === 2 && page.items.length > 5 && (
+                      <div className="w-px bg-[#ddd] shrink-0"></div>
+                    )}
+
+                    {/* Right Column */}
+                    {columnCount === 2 && page.items.length > 5 && (
+                      <div className="flex-1 flex flex-col">
+                        {page.items.slice(5, 10).map((q, localIdx) => {
+                          const absoluteIdx = page.startIndex + 5 + localIdx;
+                          return (
+                            <div key={q.id} className="mb-6" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                              <div className="font-bold text-black mb-1 flex gap-2">
+                                <span className="bg-black text-white w-5 h-5 flex items-center justify-center rounded-full text-xs shrink-0">{absoluteIdx + 1}</span>
+                                <span>정답: {q.answer}</span>
+                              </div>
+                              <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                {q.explanation}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="hidden print:block absolute bottom-4 w-full text-center text-[12px] text-gray-500 font-bold left-0">
                     - 정답 {pageIdx + 1} -
