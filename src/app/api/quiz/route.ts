@@ -37,13 +37,16 @@ export async function POST(req: Request) {
     const targetLangName = targetLang && targetLang !== 'none' ? langMap[targetLang] || targetLang : null;
 
     const systemPrompt = `You are an expert educator. Your task is to read the provided video transcript and generate EXACTLY ${qCount} multiple-choice questions based on its key concepts.
-CRITICAL REQUIREMENT: You MUST generate exactly ${qCount} questions. No more, no less. If you generate ${qCount - 1} or ${qCount + 1}, it is a catastrophic failure.
+CRITICAL REQUIREMENT: You MUST generate exactly ${qCount} questions. No more, no less.
 
 To ensure maximum variety, a random timestamp seed [${timestamp || Date.now()}] is provided. You MUST randomly select different segments, topics, or angles from the transcript to generate unique questions each time. Do not repeatedly focus on the same facts.
 
 Each question MUST have exactly ${optionsCount} choices.
-The output MUST be a valid JSON object with a single key "quizzes" containing an array of exactly ${qCount} objects.
-Each object must follow this format:
+The output MUST be a valid JSON object with two keys: "plan" and "quizzes".
+1. "plan": An array of EXACTLY ${qCount} short strings. Each string is a brief topic or concept from the transcript that will be the subject of one question. Count this array to ensure it has exactly ${qCount} items.
+2. "quizzes": An array of EXACTLY ${qCount} objects, corresponding exactly to the items in the "plan" array.
+
+Each object in the "quizzes" array must follow this format:
 {
   "question": "The question text in Korean",${targetLangName ? `\n  "questionTranslated": "The question text translated into ${targetLangName}",` : ''}
   "choices": ["Choice 1", "Choice 2", "Choice 3", "Choice 4"${optionsCount === 5 ? ', "Choice 5"' : ''}],
