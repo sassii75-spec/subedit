@@ -8,6 +8,15 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
+export type QuizItem = {
+  id: string;
+  question: string;
+  choices: string[];
+  answer: string;
+  explanation: string;
+  isSelected: boolean;
+};
+
 // 초 단위(float)를 HH:MM:SS 형식으로 변환하는 헬퍼 함수
 const formatTime = (seconds: number) => {
   const h = Math.floor(seconds / 3600);
@@ -65,8 +74,9 @@ export default function Home() {
   // 퀴즈(시험지) 탭 상태
   const [activeRightTab, setActiveRightTab] = useState<'translation' | 'quiz'>('translation');
   const [quizChoiceCount, setQuizChoiceCount] = useState<4 | 5>(4);
+  const [quizCount, setQuizCount] = useState<number>(5);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
-  const [quizzes, setQuizzes] = useState<{question: string, choices: string[], answer: string, explanation: string}[]>([]);
+  const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
   
   // 실시간 더빙 상태
   const [isLiveDubbing, setIsLiveDubbing] = useState(false);
@@ -302,7 +312,7 @@ export default function Home() {
       const response = await fetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: fullTranscript, choiceCount: quizChoiceCount })
+        body: JSON.stringify({ transcript: fullTranscript, choiceCount: quizChoiceCount, questionCount: quizCount })
       });
       
       const contentType = response.headers.get('content-type');
@@ -317,7 +327,12 @@ export default function Home() {
       if (!response.ok) throw new Error(result.error || '시험지 생성 실패');
       
       if (result.quizzes) {
-        setQuizzes(result.quizzes);
+        const enrichedQuizzes = result.quizzes.map((q: any) => ({
+          ...q,
+          id: Math.random().toString(36).substring(7),
+          isSelected: true
+        }));
+        setQuizzes(enrichedQuizzes);
       }
     } catch (e: any) {
       console.error(e);
@@ -326,6 +341,20 @@ export default function Home() {
       setIsGeneratingQuiz(false);
       setProgressMsg('');
     }
+  };
+
+  const handleQuizChange = (id: string, field: keyof QuizItem, value: any, choiceIdx?: number) => {
+    setQuizzes(prev => prev.map(q => {
+      if (q.id === id) {
+        if (field === 'choices' && choiceIdx !== undefined) {
+          const newChoices = [...q.choices];
+          newChoices[choiceIdx] = value;
+          return { ...q, choices: newChoices };
+        }
+        return { ...q, [field]: value };
+      }
+      return q;
+    }));
   };
 
   const handleSaveToHistory = async () => {
@@ -1302,7 +1331,18 @@ export default function Home() {
             <div className={`flex-col h-full overflow-hidden ${activeRightTab === 'quiz' ? 'flex' : 'hidden'} print:flex`}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 shadow-sm print:hidden">
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-gray-800">문항 형식:</span>
+                  <div className="flex items-center gap-2 bg-white px-2 py-1 rounded border border-gray-200">
+                    <span className="text-sm font-bold text-gray-800">문항 수:</span>
+                    <input 
+                      type="number" 
+                      min={1} max={20} 
+                      value={quizCount} 
+                      onChange={(e) => setQuizCount(parseInt(e.target.value) || 5)}
+                      className="w-12 px-1 py-0.5 text-sm border-none outline-none font-bold text-blue-600 bg-transparent text-center"
+                    />
+                  </div>
+                  <div className="w-px h-4 bg-gray-300" />
+                  <span className="text-sm font-bold text-gray-800">형식:</span>
                   <label className="flex items-center gap-1.5 text-sm cursor-pointer text-gray-700 hover:text-blue-600">
                     <input type="radio" name="choiceCount" value={4} checked={quizChoiceCount === 4} onChange={() => setQuizChoiceCount(4)} className="accent-blue-600" />
                     <span className="font-medium">4지선다</span>
@@ -1339,39 +1379,113 @@ export default function Home() {
                     <p className="text-xs">상단의 [영상 내용으로 시험지 생성] 버튼을 클릭하세요.</p>
                   </div>
                 ) : (
-                  <div className="bg-white print:bg-transparent max-w-3xl mx-auto">
-                    <div className="quiz-questions">
-                      <h2 className="text-2xl font-black mb-8 pb-3 border-b-2 border-black text-center print:text-left tracking-tight">강의 내용 복습 시험지</h2>
+                  <div className="max-w-3xl mx-auto w-full">
+                    
+                    {/* 화면 전용 편집 에디터 UI */}
+                    <div className="print:hidden space-y-6 pb-20">
+                      <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg flex items-center justify-between shadow-sm">
+                        <span className="text-sm font-bold text-blue-800">총 {quizzes.length}문항이 생성되었습니다. 내용을 자유롭게 수정하고 시험지에 포함할 문제를 골라주세요.</span>
+                      </div>
+                      
                       {quizzes.map((q, idx) => (
-                        <div key={idx} className="mb-10 break-inside-avoid">
-                          <p className="font-bold text-gray-900 mb-4 text-[16px] leading-relaxed">
-                            <span className="mr-1">{idx + 1}.</span> {q.question}
-                          </p>
-                          <div className="space-y-3 pl-5">
-                            {q.choices.map((choice, cIdx) => (
-                              <div key={cIdx} className="flex gap-3 text-gray-800 text-[15px]">
-                                <span className="font-bold shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
-                                <span>{choice}</span>
+                        <div key={q.id} className={`p-5 rounded-xl border ${q.isSelected ? 'border-blue-300 bg-white shadow-sm ring-1 ring-blue-100' : 'border-gray-200 bg-gray-50 opacity-60'} transition-all`}>
+                          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+                            <label className="flex items-center gap-2 cursor-pointer font-bold text-blue-700 hover:text-blue-800">
+                              <input type="checkbox" checked={q.isSelected} onChange={(e) => handleQuizChange(q.id, 'isSelected', e.target.checked)} className="w-4 h-4 accent-blue-600" />
+                              시험지에 포함
+                            </label>
+                            <span className="text-xs font-black text-gray-400 bg-gray-100 px-2 py-1 rounded">문항 {idx + 1}</span>
+                          </div>
+                          
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1.5">문제 내용</label>
+                              <textarea 
+                                value={q.question} 
+                                onChange={(e) => handleQuizChange(q.id, 'question', e.target.value)} 
+                                className="w-full p-2.5 text-[15px] font-bold text-gray-900 border border-gray-200 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none bg-gray-50 focus:bg-white transition-colors"
+                                rows={2}
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <label className="block text-xs font-bold text-gray-500 mb-1.5">보기 수정</label>
+                              {q.choices.map((choice, cIdx) => (
+                                <div key={cIdx} className="flex items-center gap-3">
+                                  <span className="font-bold text-gray-400 w-5 shrink-0 text-center">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
+                                  <input 
+                                    type="text" 
+                                    value={choice} 
+                                    onChange={(e) => handleQuizChange(q.id, 'choices', e.target.value, cIdx)} 
+                                    className="flex-1 p-2 text-sm border border-gray-200 rounded-lg focus:border-blue-500 outline-none bg-gray-50 focus:bg-white transition-colors"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            
+                            <div className="flex gap-4 pt-2">
+                              <div className="w-1/3">
+                                <label className="block text-xs font-bold text-gray-500 mb-1.5">정답 지정</label>
+                                <select 
+                                  value={q.answer} 
+                                  onChange={(e) => handleQuizChange(q.id, 'answer', e.target.value)}
+                                  className="w-full p-2 text-sm border border-gray-200 rounded-lg focus:border-blue-500 outline-none bg-gray-50 cursor-pointer"
+                                >
+                                  {q.choices.map((c, i) => <option key={i} value={c}>{i+1}번 보기</option>)}
+                                </select>
                               </div>
-                            ))}
+                              <div className="flex-1">
+                                <label className="block text-xs font-bold text-gray-500 mb-1.5">해설</label>
+                                <textarea 
+                                  value={q.explanation} 
+                                  onChange={(e) => handleQuizChange(q.id, 'explanation', e.target.value)} 
+                                  className="w-full p-2 text-sm border border-gray-200 rounded-lg focus:border-blue-500 outline-none resize-none bg-gray-50 focus:bg-white transition-colors"
+                                  rows={2}
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))}
                     </div>
-                    {/* 정답 및 해설 (새 페이지에 출력되도록 설정) */}
-                    <div className="quiz-answers break-before-page mt-16 pt-10 border-t-2 border-gray-300">
-                      <h2 className="text-xl font-black mb-8 text-center print:text-left">정답 및 해설</h2>
-                      {quizzes.map((q, idx) => (
-                        <div key={idx} className="mb-8 break-inside-avoid">
-                          <p className="font-bold text-gray-900 mb-2 text-[15px]">
-                            {idx + 1}번 정답: <span className="text-blue-600 ml-1">{q.answer}</span>
-                          </p>
-                          <div className="text-gray-700 text-[14px] bg-gray-50 p-4 rounded-lg border border-gray-100 print:border-none print:bg-transparent print:p-0 leading-relaxed">
-                            {q.explanation}
+
+                    {/* 인쇄용 최종 렌더링 UI (평소엔 숨김) */}
+                    <div className="hidden print:block bg-transparent w-full">
+                      <div className="quiz-questions">
+                        <h2 className="text-2xl font-black mb-8 pb-3 border-b-2 border-black tracking-tight">강의 내용 복습 시험지</h2>
+                        {quizzes.filter(q => q.isSelected).map((q, idx) => (
+                          <div key={q.id} className="mb-10 break-inside-avoid">
+                            <p className="font-bold text-gray-900 mb-4 text-[16px] leading-relaxed">
+                              <span className="mr-1">{idx + 1}.</span> {q.question}
+                            </p>
+                            <div className="space-y-3 pl-5">
+                              {q.choices.map((choice, cIdx) => (
+                                <div key={cIdx} className="flex gap-3 text-gray-800 text-[15px]">
+                                  <span className="font-bold shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
+                                  <span>{choice}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                      
+                      {/* 정답 및 해설 (새 페이지에 출력되도록 설정) */}
+                      <div className="quiz-answers break-before-page mt-16 pt-10 border-t-2 border-gray-300">
+                        <h2 className="text-xl font-black mb-8">정답 및 해설</h2>
+                        {quizzes.filter(q => q.isSelected).map((q, idx) => (
+                          <div key={q.id} className="mb-8 break-inside-avoid">
+                            <p className="font-bold text-gray-900 mb-2 text-[15px]">
+                              {idx + 1}번 정답: <span className="text-blue-600 ml-1">{q.answer}</span>
+                            </p>
+                            <div className="text-gray-700 text-[14px] leading-relaxed">
+                              {q.explanation}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+
                   </div>
                 )}
               </div>

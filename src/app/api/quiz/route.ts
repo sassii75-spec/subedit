@@ -10,7 +10,7 @@ const openai = new OpenAI({
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { transcript, choiceCount } = body;
+    const { transcript, choiceCount, questionCount } = body;
 
     if (!transcript) {
       return NextResponse.json({ error: '대본 데이터가 없습니다.' }, { status: 400 });
@@ -21,10 +21,11 @@ export async function POST(req: Request) {
     }
 
     const optionsCount = choiceCount === 5 ? 5 : 4;
+    const qCount = questionCount ? parseInt(questionCount) : 5;
 
-    const systemPrompt = `You are an expert educator. Your task is to read the provided video transcript and generate exactly 5 multiple-choice questions based on its key concepts.
+    const systemPrompt = `You are an expert educator. Your task is to read the provided video transcript and generate exactly ${qCount} multiple-choice questions based on its key concepts.
 Each question MUST have exactly ${optionsCount} choices.
-The output MUST be a valid JSON object with a single key "quizzes" containing an array of exactly 5 objects.
+The output MUST be a valid JSON object with a single key "quizzes" containing an array of exactly ${qCount} objects.
 Each object must follow this format:
 {
   "question": "The question text in Korean",
