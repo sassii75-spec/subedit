@@ -603,6 +603,11 @@ export default function HistoryPage() {
           body * {
             visibility: hidden;
           }
+          /* 크롬 인쇄 무한로딩 방지용 레이아웃 리셋 */
+          .overflow-hidden { overflow: visible !important; }
+          .overflow-y-auto { overflow: visible !important; }
+          .h-screen { height: auto !important; }
+
           .print\\:block, .print\\:block * {
             visibility: visible;
           }
