@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors, Combine, X, Volume2, VolumeX } from 'lucide-react';
+import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors, Combine, X, Volume2, VolumeX, BookOpen, List } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { db } from '@/lib/firebase';
@@ -795,7 +795,7 @@ export default function Home() {
       
       const a = document.createElement('a');
       a.href = url;
-      const filename = `subedit_translated_${Date.now()}.mp4`;
+      const filename = `unicon_translated_${Date.now()}.mp4`;
       a.download = filename;
       a.click();
       
@@ -910,10 +910,10 @@ export default function Home() {
       {/* Top Navigation */}
       <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shadow-sm z-10">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-lg">S</span>
+          <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center shadow-sm">
+            <span className="text-white font-black text-lg">U</span>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-gray-800">SubEdit</h1>
+          <h1 className="text-xl font-black tracking-tight text-purple-700">UNICON Creator</h1>
         </div>
         
         <div className="flex items-center gap-3">

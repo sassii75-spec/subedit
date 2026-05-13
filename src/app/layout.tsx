@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SubEdit - AI 자막 편집기",
+  title: "UNICON Creator",
   description: "AI 기반 스마트 다국어 자막 편집 플랫폼",
 };
 
