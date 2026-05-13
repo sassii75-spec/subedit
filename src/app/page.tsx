@@ -78,6 +78,13 @@ export default function Home() {
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
   
+  // 시험지 미리보기 팝업 상태
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [examTitle, setExamTitle] = useState('문제지 제목 입력');
+  const [examSubtitle, setExamSubtitle] = useState('');
+  const [columnCount, setColumnCount] = useState<1 | 2>(2);
+  const [showAnswers, setShowAnswers] = useState(true);
+  
   // 실시간 더빙 상태
   const [isLiveDubbing, setIsLiveDubbing] = useState(false);
   
@@ -1363,10 +1370,10 @@ export default function Home() {
                   </button>
                   {quizzes.length > 0 && (
                     <button 
-                      onClick={() => window.print()}
+                      onClick={() => setIsPreviewOpen(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border rounded transition-colors text-white bg-gray-800 hover:bg-gray-900 shadow-sm"
                     >
-                      시험지 PDF로 저장
+                      시험지 미리보기 및 인쇄
                     </button>
                   )}
                 </div>
@@ -1449,42 +1456,6 @@ export default function Home() {
                       ))}
                     </div>
 
-                    {/* 인쇄용 최종 렌더링 UI (평소엔 숨김) */}
-                    <div className="hidden print:block bg-transparent w-full">
-                      <div className="quiz-questions">
-                        <h2 className="text-2xl font-black mb-8 pb-3 border-b-2 border-black tracking-tight">강의 내용 복습 시험지</h2>
-                        {quizzes.filter(q => q.isSelected).map((q, idx) => (
-                          <div key={q.id} className="mb-10 break-inside-avoid">
-                            <p className="font-bold text-gray-900 mb-4 text-[16px] leading-relaxed">
-                              <span className="mr-1">{idx + 1}.</span> {q.question}
-                            </p>
-                            <div className="space-y-3 pl-5">
-                              {q.choices.map((choice, cIdx) => (
-                                <div key={cIdx} className="flex gap-3 text-gray-800 text-[15px]">
-                                  <span className="font-bold shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
-                                  <span>{choice}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      {/* 정답 및 해설 (새 페이지에 출력되도록 설정) */}
-                      <div className="quiz-answers break-before-page mt-16 pt-10 border-t-2 border-gray-300">
-                        <h2 className="text-xl font-black mb-8">정답 및 해설</h2>
-                        {quizzes.filter(q => q.isSelected).map((q, idx) => (
-                          <div key={q.id} className="mb-8 break-inside-avoid">
-                            <p className="font-bold text-gray-900 mb-2 text-[15px]">
-                              {idx + 1}번 정답: <span className="text-blue-600 ml-1">{q.answer}</span>
-                            </p>
-                            <div className="text-gray-700 text-[14px] leading-relaxed">
-                              {q.explanation}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
 
                   </div>
                 )}
@@ -1561,6 +1532,130 @@ export default function Home() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 시험지 미리보기 모달 */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 bg-gray-100 z-50 flex flex-col overflow-hidden print:bg-white">
+          {/* Top Control Panel */}
+          <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm z-10 shrink-0 print:hidden">
+            <div className="flex items-center gap-6">
+              <h2 className="text-xl font-bold text-gray-800">문제지 미리보기</h2>
+              
+              <div className="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-gray-700">레이아웃</span>
+                  <select 
+                    value={columnCount} 
+                    onChange={(e) => setColumnCount(Number(e.target.value) as 1 | 2)}
+                    className="border border-gray-300 rounded px-2 py-1 text-sm outline-none font-medium bg-white"
+                  >
+                    <option value={1}>1단 (기본)</option>
+                    <option value={2}>2단 (모의고사 폼)</option>
+                  </select>
+                </div>
+                <div className="w-px h-5 bg-gray-300"></div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-700">
+                  <input type="checkbox" checked={showAnswers} onChange={(e) => setShowAnswers(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+                  정답 및 해설 표시
+                </label>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsPreviewOpen(false)}
+                className="px-4 py-2 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                닫기
+              </button>
+              <button 
+                onClick={() => window.print()}
+                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm flex items-center gap-2"
+              >
+                PDF 출력 및 저장하기
+              </button>
+            </div>
+          </div>
+          
+          {/* Main Preview Area */}
+          <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-gray-100 print:p-0 print:bg-white print:overflow-visible">
+            <div 
+              id="quiz-print-area" 
+              className="bg-white shadow-xl border border-gray-200 p-[15mm] print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0"
+              style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif' }}
+            >
+              {/* Header */}
+              <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                <input 
+                  type="text" 
+                  value={examTitle}
+                  onChange={(e) => setExamTitle(e.target.value)}
+                  placeholder="문제지 제목 입력"
+                  className="w-full text-center text-3xl font-black mb-2 bg-transparent outline-none placeholder:text-gray-300 print:placeholder:text-transparent"
+                />
+                <input 
+                  type="text" 
+                  value={examSubtitle}
+                  onChange={(e) => setExamSubtitle(e.target.value)}
+                  placeholder="소제목 입력 (예: 제1과목)"
+                  className="w-full text-center text-lg font-bold text-gray-600 bg-transparent outline-none placeholder:text-gray-300 print:placeholder:text-transparent"
+                />
+              </div>
+
+              {/* Questions Container (1단 / 2단) */}
+              <div 
+                className="quiz-questions-container"
+                style={{ 
+                  columnCount: columnCount, 
+                  columnGap: '12mm',
+                  columnRule: columnCount === 2 ? '1px solid #ddd' : 'none'
+                }}
+              >
+                {quizzes.filter(q => q.isSelected).map((q, idx) => (
+                  <div key={q.id} className="mb-8 break-inside-avoid" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                    <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
+                      <span className="mr-1">{idx + 1}.</span> {q.question}
+                    </p>
+                    <div className="space-y-2 pl-4">
+                      {q.choices.map((choice, cIdx) => (
+                        <div key={cIdx} className="flex gap-2 text-black text-[14px]">
+                          <span className="shrink-0">{['①', '②', '③', '④', '⑤'][cIdx]}</span>
+                          <span>{choice}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Answers */}
+              {showAnswers && quizzes.filter(q => q.isSelected).length > 0 && (
+                <div className="break-before-page mt-12 pt-8 border-t-2 border-black" style={{ pageBreakBefore: 'always', breakBefore: 'page' }}>
+                  <h2 className="text-xl font-black mb-6 text-center">정답 및 해설</h2>
+                  <div 
+                    style={{ 
+                      columnCount: columnCount, 
+                      columnGap: '12mm',
+                      columnRule: columnCount === 2 ? '1px solid #ddd' : 'none'
+                    }}
+                  >
+                    {quizzes.filter(q => q.isSelected).map((q, idx) => (
+                      <div key={q.id} className="mb-6 break-inside-avoid" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                        <p className="font-bold text-black mb-2 text-[14px]">
+                          {idx + 1}번 정답: <span className="ml-1 underline underline-offset-2">{q.answer}</span>
+                        </p>
+                        <div className="text-black text-[13px] leading-relaxed">
+                          {q.explanation}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
