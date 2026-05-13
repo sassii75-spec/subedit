@@ -1299,7 +1299,7 @@ export default function Home() {
                         onChange={(e) => handleSubtitleEdit(sub.id, e.target.value)}
                         rows={2}
                       />
-                      <div className="flex flex-col gap-1 mt-1 shrink-0">
+                      <div className="flex gap-1 mt-1 shrink-0 h-fit">
                         <button
                           onClick={() => handleClipVideo(sub.start, sub.end, sub.id)}
                           disabled={isClipping !== null}
