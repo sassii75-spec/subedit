@@ -924,6 +924,72 @@ export default function Home() {
     }
   };
 
+  // Iframe 기반 독립 인쇄 함수 (크롬 무한 로딩 버그 방지)
+  const handleIframePrint = (printAreaId: string) => {
+    const printContent = document.getElementById(printAreaId);
+    if (!printContent) return;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const iframeWindow = iframe.contentWindow;
+    if (!iframeWindow) return;
+    const iframeDocument = iframeWindow.document;
+
+    iframeDocument.open();
+    iframeDocument.write('<html><head><title>시험지 인쇄</title>');
+
+    // 현재 페이지의 모든 스타일 태그 복사 (Tailwind 적용)
+    const styles = document.querySelectorAll('style, link[rel="stylesheet"]');
+    styles.forEach((style) => {
+      iframeDocument.write(style.outerHTML);
+    });
+
+    iframeDocument.write(`
+      <style>
+        @media print {
+          @page { size: A4 portrait; margin: 0; }
+          body { 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+            background-color: white !important; 
+          }
+        }
+        body { 
+          background-color: white; 
+          margin: 0; 
+          padding: 0; 
+        }
+        #\${printAreaId} {
+          padding: 0 !important;
+          height: auto !important;
+          overflow: visible !important;
+        }
+      </style>
+    `);
+    
+    iframeDocument.write('</head><body>');
+    iframeDocument.write(printContent.outerHTML);
+    iframeDocument.write('</body></html>');
+    iframeDocument.close();
+
+    setTimeout(() => {
+      iframeWindow.focus();
+      iframeWindow.print();
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 1000);
+    }, 500);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50 text-gray-900 font-sans">
       {/* Top Navigation */}
@@ -1615,7 +1681,7 @@ export default function Home() {
                 닫기
               </button>
               <button 
-                onClick={() => window.print()}
+                onClick={() => handleIframePrint('quiz-print-area')}
                 className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm flex items-center gap-2"
               >
                 PDF 출력 및 저장하기
@@ -1624,7 +1690,7 @@ export default function Home() {
           </div>
           
           {/* Main Preview Area */}
-          <div className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block print:relative print:w-full">
+          <div id="quiz-print-area" className="flex-1 overflow-y-auto p-8 flex flex-col items-center gap-10 bg-gray-100 print:p-0 print:bg-white print:overflow-visible print:block print:relative print:w-full">
             
             {/* 1. 문제지 페이지 (페이지 분할 적용) */}
             {(() => {
