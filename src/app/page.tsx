@@ -100,6 +100,14 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [liveOriginalTexts, setLiveOriginalTexts] = useState<{id: number, text: string}[]>([]);
   const [liveTranslatedTexts, setLiveTranslatedTexts] = useState<{id: number, text: string}[]>([]);
+  const [sourceLang, setSourceLang] = useState('ko-KR');
+  const sourceLangRef = useRef(sourceLang);
+  useEffect(() => {
+    sourceLangRef.current = sourceLang;
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  }, [sourceLang, isListening]);
   const recognitionRef = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -870,7 +878,6 @@ export default function Home() {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = false;
-      recognition.lang = 'ko-KR';
 
       recognition.onresult = async (event: any) => {
         const currentResult = event.results[event.results.length - 1];
@@ -906,12 +913,16 @@ export default function Home() {
       };
 
       recognition.onend = () => {
-        if (isListening) recognition.start(); // 계속 듣기
+        if (isListening) {
+          recognition.lang = sourceLangRef.current;
+          recognition.start(); // 계속 듣기
+        }
       };
 
       recognitionRef.current = recognition;
     }
 
+    recognitionRef.current.lang = sourceLangRef.current;
     recognitionRef.current.start();
     setIsListening(true);
   };
@@ -1300,6 +1311,7 @@ export default function Home() {
                   }}
                   className="text-sm font-bold text-gray-800 bg-transparent outline-none cursor-pointer border-b border-dashed border-gray-400 pb-0.5"
                 >
+                  <option value="ko">한국어 (Korean)</option>
                   <option value="en">영어 (English)</option>
                   <option value="zh">중국어 (中文)</option>
                   <option value="ja">일본어 (日本語)</option>
@@ -1571,10 +1583,27 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-3">
                 <select 
+                  value={sourceLang}
+                  onChange={(e) => setSourceLang(e.target.value)}
+                  className="text-sm font-bold text-gray-800 bg-gray-100 rounded px-3 py-1.5 outline-none cursor-pointer"
+                >
+                  <option value="ko-KR">한국어 인식</option>
+                  <option value="en-US">영어 인식</option>
+                  <option value="ja-JP">일본어 인식</option>
+                  <option value="zh-CN">중국어 인식</option>
+                  <option value="vi-VN">베트남어 인식</option>
+                  <option value="th-TH">태국어 인식</option>
+                  <option value="es-ES">스페인어 인식</option>
+                  <option value="fr-FR">프랑스어 인식</option>
+                  <option value="id-ID">인도네시아어 인식</option>
+                </select>
+                <span className="text-gray-400 font-bold">→</span>
+                <select 
                   value={targetLang}
                   onChange={(e) => setTargetLang(e.target.value)}
                   className="text-sm font-bold text-gray-800 bg-gray-100 rounded px-3 py-1.5 outline-none cursor-pointer"
                 >
+                  <option value="ko">한국어 번역</option>
                   <option value="en">영어 번역</option>
                   <option value="zh">중국어 번역</option>
                   <option value="ja">일본어 번역</option>
@@ -1599,7 +1628,7 @@ export default function Home() {
               {/* 좌측: 인식된 음성 */}
               <div className="w-1/2 flex flex-col border-r border-gray-200">
                 <div className="p-3 bg-white border-b border-gray-100 font-semibold text-gray-700 text-sm text-center">
-                  한국어 음성 인식
+                  원본 음성 인식 결과
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col-reverse">
                   {liveOriginalTexts.slice().reverse().map(item => (

@@ -22,6 +22,7 @@ export async function POST(req: Request) {
 
     // 언어명 매핑
     const langMap: Record<string, string> = {
+      'ko': 'Korean',
       'en': 'English',
       'zh': 'Chinese (Simplified)',
       'ja': 'Japanese',
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     const targetLangName = langMap[targetLanguage] || targetLanguage;
 
     // 시스템 프롬프트 작성
-    const systemPrompt = `You are an expert subtitle translator. Translate the given JSON array of subtitles from Korean to ${targetLangName}.
+    const systemPrompt = `You are an expert subtitle translator. Translate the given JSON array of subtitles from the original language to ${targetLangName}.
 Requirements:
 1. Keep the exact same 'id', 'start', and 'end' values.
 2. Only translate the 'text' field to ${targetLangName}.
