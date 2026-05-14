@@ -1641,25 +1641,23 @@ export default function Home() {
                   className={`bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 relative ${pageIdx > 0 ? 'break-before-page' : ''}`}
                   style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: pageIdx > 0 ? 'always' : 'auto', breakBefore: pageIdx > 0 ? 'page' : 'auto' }}
                 >
-                  {/* Header (첫 페이지만) */}
-                  {pageIdx === 0 && (
-                    <div className="mb-8 border-b-2 border-black pb-4 text-center">
-                      <input 
-                        type="text" 
-                        value={examTitle}
-                        onChange={(e) => setExamTitle(e.target.value)}
-                        placeholder="문제지 제목 입력"
-                        className="w-full text-center text-3xl font-black mb-2 bg-transparent outline-none placeholder:text-gray-300 print:placeholder:text-transparent"
-                      />
-                      <input 
-                        type="text" 
-                        value={examSubtitle}
-                        onChange={(e) => setExamSubtitle(e.target.value)}
-                        placeholder="소제목 입력 (예: 제1과목)"
-                        className="w-full text-center text-lg font-bold text-gray-600 bg-transparent outline-none placeholder:text-gray-300 print:placeholder:text-transparent"
-                      />
-                    </div>
-                  )}
+                  {/* Header (모든 페이지에 동일한 포맷 적용) */}
+                  <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                    <input 
+                      type="text" 
+                      value={examTitle}
+                      onChange={(e) => setExamTitle(e.target.value)}
+                      placeholder="문제지 제목 입력"
+                      className="w-full text-center text-3xl font-black mb-2 bg-transparent outline-none placeholder:text-gray-300 print:placeholder:text-transparent"
+                    />
+                    <input 
+                      type="text" 
+                      value={examSubtitle}
+                      onChange={(e) => setExamSubtitle(e.target.value)}
+                      placeholder="소제목 입력 (예: 제1과목)"
+                      className="w-full text-center text-lg font-bold text-gray-600 bg-transparent outline-none placeholder:text-gray-300 print:placeholder:text-transparent"
+                    />
+                  </div>
 
                   {/* Questions Container (Flexbox 2단) */}
                   <div className={`flex ${columnCount === 2 ? 'gap-[12mm]' : 'flex-col'}`}>
@@ -1688,9 +1686,9 @@ export default function Home() {
                       })}
                     </div>
 
-                    {/* Divider */}
+                    {/* Divider (항상 세로줄 표시) */}
                     {columnCount === 2 && (
-                      <div className={`w-0 shrink-0 border-l ${page.items.length > 5 ? 'border-[#ccc]' : 'border-transparent'}`}></div>
+                      <div className="w-0 shrink-0 border-l border-[#ccc]"></div>
                     )}
 
                     {/* Right Column */}
@@ -1747,12 +1745,11 @@ export default function Home() {
                   className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 break-before-page relative"
                   style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: 'always', breakBefore: 'page' }}
                 >
-                  {pageIdx === 0 && (
-                    <div className="mb-8 border-b-2 border-black pb-4 text-center">
-                      <h2 className="text-3xl font-black mb-2">정답 및 해설</h2>
-                      <div className="text-lg font-bold text-gray-600">{examTitle || '문제지 제목'}</div>
-                    </div>
-                  )}
+                  {/* 정답 페이지 Header (모든 페이지에 동일 포맷 적용) */}
+                  <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                    <h2 className="text-3xl font-black mb-2">정답 및 해설</h2>
+                    <div className="text-lg font-bold text-gray-600">{examTitle || '문제지 제목'}</div>
+                  </div>
                   <div className={`flex ${columnCount === 2 ? 'gap-[12mm]' : 'flex-col'}`}>
                     {/* Left Column */}
                     <div className="flex-1 flex flex-col">
@@ -1772,9 +1769,9 @@ export default function Home() {
                       })}
                     </div>
 
-                    {/* Divider */}
+                    {/* Divider (항상 세로줄 표시) */}
                     {columnCount === 2 && (
-                      <div className={`w-0 shrink-0 border-l ${page.items.length > 5 ? 'border-[#ccc]' : 'border-transparent'}`}></div>
+                      <div className="w-0 shrink-0 border-l border-[#ccc]"></div>
                     )}
 
                     {/* Right Column */}

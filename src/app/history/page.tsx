@@ -438,13 +438,11 @@ export default function HistoryPage() {
                   className={`bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 relative ${pageIdx > 0 ? 'break-before-page' : ''}`}
                   style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: pageIdx > 0 ? 'always' : 'auto', breakBefore: pageIdx > 0 ? 'page' : 'auto' }}
                 >
-                  {/* Header */}
-                  {pageIdx === 0 && (
-                    <div className="mb-8 border-b-2 border-black pb-4 text-center">
-                      <h1 className="w-full text-center text-3xl font-black mb-2">{printExam.title || '제목 없음'}</h1>
-                      <h2 className="w-full text-center text-lg font-bold text-gray-600">{printExam.subtitle || ''}</h2>
-                    </div>
-                  )}
+                  {/* Header (모든 페이지에 동일한 포맷 적용) */}
+                  <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                    <h1 className="w-full text-center text-3xl font-black mb-2">{printExam.title || '제목 없음'}</h1>
+                    <h2 className="w-full text-center text-lg font-bold text-gray-600">{printExam.subtitle || ''}</h2>
+                  </div>
 
                   {/* Questions Container (Flexbox 2단) */}
                   <div className={`flex ${printColumnCount === 2 ? 'gap-[12mm]' : 'flex-col'}`}>
@@ -473,9 +471,9 @@ export default function HistoryPage() {
                       })}
                     </div>
 
-                    {/* Divider */}
+                    {/* Divider (항상 세로줄 표시) */}
                     {printColumnCount === 2 && (
-                      <div className={`w-0 shrink-0 border-l ${page.items.length > 5 ? 'border-[#ccc]' : 'border-transparent'}`}></div>
+                      <div className="w-0 shrink-0 border-l border-[#ccc]"></div>
                     )}
 
                     {/* Right Column */}
@@ -532,12 +530,11 @@ export default function HistoryPage() {
                   className="bg-white shadow-xl border border-gray-200 p-[15mm] shrink-0 print:shadow-none print:border-none print:p-0 print:w-full print:max-w-none print:m-0 break-before-page relative"
                   style={{ width: '210mm', minHeight: '297mm', fontFamily: '"Batang", "KoPub Batang", serif', pageBreakBefore: 'always', breakBefore: 'page' }}
                 >
-                  {pageIdx === 0 && (
-                    <div className="mb-8 border-b-2 border-black pb-4 text-center">
-                      <h2 className="text-3xl font-black mb-2">정답 및 해설</h2>
-                      <div className="text-lg font-bold text-gray-600">{printExam.title || '문제지 제목'}</div>
-                    </div>
-                  )}
+                  {/* 정답 페이지 Header (모든 페이지에 동일 포맷 적용) */}
+                  <div className="mb-8 border-b-2 border-black pb-4 text-center">
+                    <h2 className="text-3xl font-black mb-2">정답 및 해설</h2>
+                    <div className="text-lg font-bold text-gray-600">{printExam.title || '문제지 제목'}</div>
+                  </div>
                   <div className={`flex ${printColumnCount === 2 ? 'gap-[12mm]' : 'flex-col'}`}>
                     {/* Left Column */}
                     <div className="flex-1 flex flex-col">
@@ -557,9 +554,9 @@ export default function HistoryPage() {
                       })}
                     </div>
 
-                    {/* Divider */}
+                    {/* Divider (항상 세로줄 표시) */}
                     {printColumnCount === 2 && (
-                      <div className={`w-0 shrink-0 border-l ${page.items.length > 5 ? 'border-[#ccc]' : 'border-transparent'}`}></div>
+                      <div className="w-0 shrink-0 border-l border-[#ccc]"></div>
                     )}
 
                     {/* Right Column */}
