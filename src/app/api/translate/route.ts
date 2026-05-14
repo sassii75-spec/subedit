@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
 
 export const maxDuration = 300; 
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(req: Request) {
   try {
@@ -16,50 +11,50 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: '필수 파라미터가 누락되었습니다.' }, { status: 400 });
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: 'OPENAI_API_KEY가 설정되지 않았습니다.' }, { status: 500 });
+    const googleApiKey = process.env.GOOGLE_TRANSLATE_API_KEY;
+    if (!googleApiKey) {
+      return NextResponse.json({ error: 'GOOGLE_TRANSLATE_API_KEY가 설정되지 않았습니다.' }, { status: 500 });
     }
 
-    // 언어명 매핑
-    const langMap: Record<string, string> = {
-      'ko': 'Korean',
-      'en': 'English',
-      'zh': 'Chinese (Simplified)',
-      'ja': 'Japanese',
-      'vi': 'Vietnamese',
-      'my': 'Burmese (Myanmar)',
-      'bn': 'Bengali',
-      'sw': 'Swahili'
+    // Google Translate 언어 코드 매핑 (대부분 동일하지만 중국어 간체 명시)
+    const googleLangMap: Record<string, string> = {
+      'zh': 'zh-CN', // 중국어 간체
     };
     
-    const targetLangName = langMap[targetLanguage] || targetLanguage;
+    const targetLangCode = googleLangMap[targetLanguage] || targetLanguage;
 
-    // 시스템 프롬프트 작성
-    const systemPrompt = `You are an expert subtitle translator. Translate the given JSON array of subtitles from the original language to ${targetLangName}.
-Requirements:
-1. Keep the exact same 'id', 'start', and 'end' values.
-2. Only translate the 'text' field to ${targetLangName}.
-3. Return the response STRICTLY as a valid JSON object with a single key "translatedSubtitles" containing the array. Do not include markdown formatting like \`\`\`json.`;
+    // 번역할 텍스트 추출
+    const textsToTranslate = subtitles.map((sub: any) => sub.text);
 
-    // 데이터 크기가 클 수 있으므로 효율적인 처리를 위해 gpt-4o-mini 모델 사용
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: JSON.stringify(subtitles) }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3,
+    // Google Cloud Translation API (v2) 엔드포인트
+    const googleApiUrl = `https://translation.googleapis.com/language/translate/v2?key=${googleApiKey}`;
+
+    const response = await fetch(googleApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        q: textsToTranslate,
+        target: targetLangCode,
+        format: 'text' // HTML 태그 방지
+      })
     });
 
-    const content = response.choices[0].message.content;
-    if (!content) {
-      throw new Error("API 응답이 비어있습니다.");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Google Translate API Error: ${errorData.error?.message || response.statusText}`);
     }
 
-    const parsedContent = JSON.parse(content);
+    const data = await response.json();
 
-    return NextResponse.json(parsedContent);
+    // 원본 자막 배열에 번역 결과 매핑
+    const translatedSubtitles = subtitles.map((sub: any, index: number) => ({
+      ...sub,
+      text: data.data.translations[index].translatedText
+    }));
+
+    return NextResponse.json({ translatedSubtitles });
 
   } catch (error: any) {
     console.error('Translation Error:', error);

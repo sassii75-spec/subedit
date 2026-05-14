@@ -98,8 +98,13 @@ export default function Home() {
   // 실시간 캡션 관련 상태
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const isListeningRef = useRef(isListening);
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
   const [liveOriginalTexts, setLiveOriginalTexts] = useState<{id: number, text: string}[]>([]);
   const [liveTranslatedTexts, setLiveTranslatedTexts] = useState<{id: number, text: string}[]>([]);
+  const [interimText, setInterimText] = useState('');
   const [sourceLang, setSourceLang] = useState('ko-KR');
   const sourceLangRef = useRef(sourceLang);
   useEffect(() => {
@@ -862,6 +867,7 @@ export default function Home() {
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
+      setInterimText('');
     } else {
       startLiveCaption();
     }
@@ -877,45 +883,66 @@ export default function Home() {
     if (!recognitionRef.current) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
-      recognition.interimResults = false;
+      recognition.interimResults = true;
 
       recognition.onresult = async (event: any) => {
-        const currentResult = event.results[event.results.length - 1];
-        if (currentResult.isFinal) {
-          const transcript = currentResult[0].transcript;
-          const newId = Date.now();
-          
-          setLiveOriginalTexts(prev => [...prev, { id: newId, text: transcript }]);
-
-          // 바로 번역 API 호출
-          try {
-            const response = await fetch('/api/translate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                subtitles: [{ id: newId, start: '0', end: '0', text: transcript }],
-                targetLanguage: targetLangRef.current, // 클로저 이슈 방지를 위해 최신 참조값 사용
-              }),
+        let interimTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            const finalTranscript = event.results[i][0].transcript;
+            const newId = Date.now() + i; // 고유 ID 보장
+            
+            setLiveOriginalTexts(prev => {
+              const next = [...prev, { id: newId, text: finalTranscript }];
+              return next.slice(-50); // 메모리 최적화를 위해 최근 50개 유지
             });
-            const result = await response.json();
-            if (result.translatedSubtitles && result.translatedSubtitles[0]) {
-              setLiveTranslatedTexts(prev => [...prev, { id: newId, text: result.translatedSubtitles[0].text }]);
+
+            // 바로 번역 API 호출
+            try {
+              const response = await fetch('/api/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  subtitles: [{ id: newId, start: '0', end: '0', text: finalTranscript }],
+                  targetLanguage: targetLangRef.current, // 클로저 이슈 방지
+                }),
+              });
+              const result = await response.json();
+              if (result.translatedSubtitles && result.translatedSubtitles[0]) {
+                setLiveTranslatedTexts(prev => {
+                  const next = [...prev, { id: newId, text: result.translatedSubtitles[0].text }];
+                  return next.slice(-50); // 메모리 최적화를 위해 최근 50개 유지
+                });
+              }
+            } catch (err) {
+              console.error('Live Translation Error:', err);
             }
-          } catch (err) {
-            console.error('Live Translation Error:', err);
+          } else {
+            interimTranscript += event.results[i][0].transcript;
           }
         }
+        
+        setInterimText(interimTranscript);
       };
 
       recognition.onerror = (event: any) => {
         console.error('Speech recognition error', event.error);
-        setIsListening(false);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setIsListening(false);
+          alert('마이크 권한이 없거나 지원되지 않습니다.');
+        }
+        // 'no-speech' 등 일시적 에러는 무시하고 onend에서 재시작되도록 함
       };
 
       recognition.onend = () => {
-        if (isListening) {
+        if (isListeningRef.current) {
           recognition.lang = sourceLangRef.current;
-          recognition.start(); // 계속 듣기
+          try {
+            recognition.start(); // 계속 듣기
+          } catch(e) {
+            console.error('Speech recognition restart error', e);
+          }
         }
       };
 
@@ -1631,6 +1658,11 @@ export default function Home() {
                   원본 음성 인식 결과
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col-reverse">
+                  {interimText && (
+                    <div className="p-3 bg-gray-100 rounded-lg shadow-sm border border-gray-200 text-gray-500 text-[15px] italic animate-pulse">
+                      {interimText}
+                    </div>
+                  )}
                   {liveOriginalTexts.slice().reverse().map(item => (
                     <div key={item.id} className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 text-gray-800 text-[15px]">
                       {item.text}
