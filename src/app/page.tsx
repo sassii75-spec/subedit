@@ -1143,7 +1143,7 @@ export default function Home() {
       <main className="flex-1 flex flex-col overflow-hidden">
         
         {/* Top Pane: Video Player */}
-        <section className="flex-none h-[40vh] bg-[#1a1b26] border-b border-gray-300 relative flex flex-col items-center justify-center p-4">
+        <section className="flex-none h-[60vh] bg-[#1a1b26] border-b border-gray-300 relative flex flex-col items-center justify-center p-4">
           {!videoSrc ? (
             <div className="w-full h-full border-2 border-dashed border-gray-600 rounded-xl flex flex-col items-center justify-center bg-gray-800/30">
               <Upload size={48} className="text-gray-500 mb-4" />
@@ -1178,7 +1178,7 @@ export default function Home() {
               </div>
               
               {/* 하단 자막 전용 영역 (블랙 바) */}
-              <div className="h-16 sm:h-20 bg-[#0f0f0f] border-t border-gray-800 flex items-center justify-center px-4 md:px-8 shadow-[inset_0_4px_10px_rgba(0,0,0,0.5)] z-10 shrink-0">
+              <div className="h-12 sm:h-14 bg-[#0f0f0f] border-t border-gray-800 flex items-center justify-center px-4 md:px-8 shadow-[inset_0_4px_10px_rgba(0,0,0,0.5)] z-10 shrink-0">
                 <div className="text-white text-base sm:text-lg md:text-xl font-bold tracking-wide text-center leading-snug drop-shadow-md transition-opacity duration-150">
                   {currentOverlay || <span className="opacity-0">자막 대기중</span>}
                 </div>
