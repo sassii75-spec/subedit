@@ -1732,7 +1732,7 @@ export default function Home() {
                       {(columnCount === 2 ? page.items.slice(0, 5) : page.items).map((q, localIdx) => {
                         const absoluteIdx = page.startIndex + localIdx;
                         return (
-                          <div key={q.id} className="mb-8" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                          <div key={q.id} className="mb-8">
                             <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
                               <span className="mr-1">{absoluteIdx + 1}.</span> {q.question}
                               {printShowTranslatedQuestion && q.questionTranslated && (
@@ -1763,7 +1763,7 @@ export default function Home() {
                         {page.items.length > 5 && page.items.slice(5, 10).map((q, localIdx) => {
                           const absoluteIdx = page.startIndex + 5 + localIdx;
                           return (
-                            <div key={q.id} className="mb-8" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                            <div key={q.id} className="mb-8">
                               <p className="font-bold text-black mb-3 text-[15px] leading-relaxed">
                                 <span className="mr-1">{absoluteIdx + 1}.</span> {q.question}
                                 {printShowTranslatedQuestion && q.questionTranslated && (
@@ -1822,7 +1822,7 @@ export default function Home() {
                       {(columnCount === 2 ? page.items.slice(0, 5) : page.items).map((q, localIdx) => {
                         const absoluteIdx = page.startIndex + localIdx;
                         return (
-                          <div key={q.id} className="mb-6" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                          <div key={q.id} className="mb-6">
                             <div className="font-bold text-black mb-1 flex gap-2">
                               <span className="bg-black text-white w-5 h-5 flex items-center justify-center rounded-full text-xs shrink-0">{absoluteIdx + 1}</span>
                               <span>정답: {q.answer}</span>
@@ -1846,7 +1846,7 @@ export default function Home() {
                         {page.items.length > 5 && page.items.slice(5, 10).map((q, localIdx) => {
                           const absoluteIdx = page.startIndex + 5 + localIdx;
                           return (
-                            <div key={q.id} className="mb-6" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+                            <div key={q.id} className="mb-6">
                               <div className="font-bold text-black mb-1 flex gap-2">
                                 <span className="bg-black text-white w-5 h-5 flex items-center justify-center rounded-full text-xs shrink-0">{absoluteIdx + 1}</span>
                                 <span>정답: {q.answer}</span>
