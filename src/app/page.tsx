@@ -96,6 +96,46 @@ export default function Home() {
   const [projectTitle, setProjectTitle] = useState<string | null>(null);
   const [initialOriginalSubtitles, setInitialOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [initialTranslatedSubtitles, setInitialTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
+
+  // Reactive effect to dynamically build baseline for original subtitles chunk-by-chunk
+  useEffect(() => {
+    if (originalSubtitles.length > 0) {
+      setInitialOriginalSubtitles(prev => {
+        if (prev.length === 0) return JSON.parse(JSON.stringify(originalSubtitles));
+        const updated = [...prev];
+        let hasNew = false;
+        originalSubtitles.forEach(sub => {
+          if (!prev.some(p => p.id === sub.id)) {
+            updated.push(JSON.parse(JSON.stringify(sub)));
+            hasNew = true;
+          }
+        });
+        return hasNew ? updated : prev;
+      });
+    } else {
+      setInitialOriginalSubtitles([]);
+    }
+  }, [originalSubtitles]);
+
+  // Reactive effect to dynamically build baseline for translated subtitles chunk-by-chunk
+  useEffect(() => {
+    if (translatedSubtitles.length > 0) {
+      setInitialTranslatedSubtitles(prev => {
+        if (prev.length === 0) return JSON.parse(JSON.stringify(translatedSubtitles));
+        const updated = [...prev];
+        let hasNew = false;
+        translatedSubtitles.forEach(sub => {
+          if (!prev.some(p => p.id === sub.id)) {
+            updated.push(JSON.parse(JSON.stringify(sub)));
+            hasNew = true;
+          }
+        });
+        return hasNew ? updated : prev;
+      });
+    } else {
+      setInitialTranslatedSubtitles([]);
+    }
+  }, [translatedSubtitles]);
   
   // 스크롤 동기화를 위한 ref
   const originalListRef = useRef<HTMLDivElement>(null);
@@ -235,7 +275,6 @@ export default function Home() {
         await ffmpeg.deleteFile(chunkFileName);
       }
       
-      setInitialOriginalSubtitles([...allSegments]);
       setProgressMsg('자막 생성 완료!');
       setTimeout(() => setIsProcessing(false), 2000);
       
@@ -292,7 +331,6 @@ export default function Home() {
         }
       }
       
-      setInitialTranslatedSubtitles([...translatedAcc]);
       // 번역 완료 시 캐시에 저장
       setTranslationsCache(prev => ({
         ...prev,
@@ -1485,10 +1523,8 @@ export default function Home() {
                     // 캐시된 자막이 있으면 즉시 불러오고, 없으면 빈 배열로 초기화 (자동으로 '번역' 버튼을 유도)
                     if (translationsCache[newLang]) {
                       setTranslatedSubtitles(translationsCache[newLang]);
-                      setInitialTranslatedSubtitles(translationsCache[newLang]);
                     } else {
                       setTranslatedSubtitles([]);
-                      setInitialTranslatedSubtitles([]);
                     }
                   }}
                   className="text-sm font-bold text-gray-800 bg-transparent outline-none cursor-pointer border-b border-dashed border-gray-400 pb-0.5"
