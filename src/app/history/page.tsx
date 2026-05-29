@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List } from 'lucide-react';
+import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List, Eye, Clipboard, Check } from 'lucide-react';
 import Link from 'next/link';
 
 interface SubtitleProject {
@@ -29,6 +29,8 @@ export default function HistoryPage() {
   const [exams, setExams] = useState<ExamProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [previewProject, setPreviewProject] = useState<SubtitleProject | null>(null);
+  const [viewFileModal, setViewFileModal] = useState<{ project: SubtitleProject, isOriginal: boolean, format: 'SRT' | 'SMI', content: string } | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   // 인쇄 전용 모달 상태
   const [printExam, setPrintExam] = useState<ExamProject | null>(null);
@@ -104,30 +106,19 @@ export default function HistoryPage() {
     return `${mm}${dd}_${hh}${min}`;
   };
 
-  const downloadSRT = (project: SubtitleProject, isOriginal: boolean = false) => {
+  const generateSRTContent = (project: SubtitleProject, isOriginal: boolean = false) => {
     let srtContent = '';
     const targetSubtitles = isOriginal ? project.originalSubtitles : project.translatedSubtitles;
-    const langSuffix = isOriginal ? '원본' : project.targetLang;
-
     targetSubtitles.forEach((sub, idx) => {
       srtContent += `${idx + 1}\n`;
       srtContent += `${formatSrtTime(sub.start)} --> ${formatSrtTime(sub.end)}\n`;
       srtContent += `${sub.text}\n\n`;
     });
-
-    const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${project.title}_${langSuffix}_${getFormattedDate()}.srt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    return srtContent;
   };
 
-  const downloadSMI = (project: SubtitleProject, isOriginal: boolean = false) => {
+  const generateSMIContent = (project: SubtitleProject, isOriginal: boolean = false) => {
     const targetSubtitles = isOriginal ? project.originalSubtitles : project.translatedSubtitles;
-    const langSuffix = isOriginal ? '원본' : project.targetLang;
     const langCode = isOriginal ? 'ko' : project.targetLang; // 원본은 주로 한국어/다국어, 포맷용으로 ko 유지
 
     let smiContent = `<SAMI>\n<HEAD>\n<TITLE>${project.title}</TITLE>\n<STYLE TYPE="text/css">\n<!--\nP { font-family: Arial; font-size: 14pt; text-align: center; color: #FFFFFF; }\n.TRANS { Name: Subtitle; lang: ${langCode}; SAMIType: CC; }\n-->\n</STYLE>\n</HEAD>\n<BODY>\n`;
@@ -140,8 +131,28 @@ export default function HistoryPage() {
     });
 
     smiContent += `</BODY>\n</SAMI>`;
+    return smiContent;
+  };
 
-    const blob = new Blob([smiContent], { type: 'text/plain;charset=utf-8' });
+  const downloadSRT = (project: SubtitleProject, isOriginal: boolean = false) => {
+    const content = generateSRTContent(project, isOriginal);
+    const langSuffix = isOriginal ? '원본' : project.targetLang;
+    
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${project.title}_${langSuffix}_${getFormattedDate()}.srt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadSMI = (project: SubtitleProject, isOriginal: boolean = false) => {
+    const content = generateSMIContent(project, isOriginal);
+    const langSuffix = isOriginal ? '원본' : project.targetLang;
+    
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -149,6 +160,14 @@ export default function HistoryPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleOpenViewer = (project: SubtitleProject, isOriginal: boolean, format: 'SRT' | 'SMI') => {
+    const content = format === 'SRT' 
+      ? generateSRTContent(project, isOriginal) 
+      : generateSMIContent(project, isOriginal);
+    setViewFileModal({ project, isOriginal, format, content });
+    setIsCopied(false);
   };
 
   // 언어명 매핑
@@ -293,34 +312,78 @@ export default function HistoryPage() {
                   <div className="flex flex-col gap-2 mt-auto">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-gray-500 w-10 shrink-0 text-center bg-gray-100 rounded py-1">원본</span>
-                      <button 
-                        onClick={() => downloadSRT(project, true)}
-                        className="flex-1 flex justify-center items-center gap-1.5 py-1.5 px-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-xs font-semibold"
-                      >
-                        <Download size={14} /> .SRT
-                      </button>
-                      <button 
-                        onClick={() => downloadSMI(project, true)}
-                        className="flex-1 flex justify-center items-center gap-1.5 py-1.5 px-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-xs font-semibold"
-                      >
-                        <Download size={14} /> .SMI
-                      </button>
+                      {/* SRT Split Download & Preview */}
+                      <div className="flex-1 flex items-center border border-gray-300 rounded-md overflow-hidden bg-white">
+                        <button 
+                          onClick={() => downloadSRT(project, true)}
+                          className="flex-1 py-1.5 px-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 border-r border-gray-200 transition-colors flex items-center justify-center gap-1"
+                          title="SRT 파일 직접 다운로드"
+                        >
+                          <Download size={11} /> .SRT
+                        </button>
+                        <button 
+                          onClick={() => handleOpenViewer(project, true, 'SRT')}
+                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors shrink-0"
+                          title="SRT 파일 내용 미리보기"
+                        >
+                          <Eye size={12} />
+                        </button>
+                      </div>
+                      {/* SMI Split Download & Preview */}
+                      <div className="flex-1 flex items-center border border-gray-300 rounded-md overflow-hidden bg-white">
+                        <button 
+                          onClick={() => downloadSMI(project, true)}
+                          className="flex-1 py-1.5 px-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 border-r border-gray-200 transition-colors flex items-center justify-center gap-1"
+                          title="SMI 파일 직접 다운로드"
+                        >
+                          <Download size={11} /> .SMI
+                        </button>
+                        <button 
+                          onClick={() => handleOpenViewer(project, true, 'SMI')}
+                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors shrink-0"
+                          title="SMI 파일 내용 미리보기"
+                        >
+                          <Eye size={12} />
+                        </button>
+                      </div>
                     </div>
                     
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-blue-600 w-10 shrink-0 text-center bg-blue-50 border border-blue-100 rounded py-1">번역</span>
-                      <button 
-                        onClick={() => downloadSRT(project, false)}
-                        className="flex-1 flex justify-center items-center gap-1.5 py-1.5 px-2 bg-white border border-gray-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors text-xs font-semibold"
-                      >
-                        <Download size={14} /> .SRT
-                      </button>
-                      <button 
-                        onClick={() => downloadSMI(project, false)}
-                        className="flex-1 flex justify-center items-center gap-1.5 py-1.5 px-2 bg-white border border-gray-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors text-xs font-semibold"
-                      >
-                        <Download size={14} /> .SMI
-                      </button>
+                      {/* SRT Split Download & Preview */}
+                      <div className="flex-1 flex items-center border border-blue-200 rounded-md overflow-hidden bg-white">
+                        <button 
+                          onClick={() => downloadSRT(project, false)}
+                          className="flex-1 py-1.5 px-1 text-[11px] font-semibold text-blue-750 hover:bg-blue-50 border-r border-blue-100 transition-colors flex items-center justify-center gap-1"
+                          title="SRT 번역본 파일 직접 다운로드"
+                        >
+                          <Download size={11} /> .SRT
+                        </button>
+                        <button 
+                          onClick={() => handleOpenViewer(project, false, 'SRT')}
+                          className="p-1 text-gray-400 hover:text-blue-650 hover:bg-blue-50 transition-colors shrink-0"
+                          title="SRT 번역본 파일 내용 미리보기"
+                        >
+                          <Eye size={12} />
+                        </button>
+                      </div>
+                      {/* SMI Split Download & Preview */}
+                      <div className="flex-1 flex items-center border border-blue-200 rounded-md overflow-hidden bg-white">
+                        <button 
+                          onClick={() => downloadSMI(project, false)}
+                          className="flex-1 py-1.5 px-1 text-[11px] font-semibold text-blue-750 hover:bg-blue-50 border-r border-blue-100 transition-colors flex items-center justify-center gap-1"
+                          title="SMI 번역본 파일 직접 다운로드"
+                        >
+                          <Download size={11} /> .SMI
+                        </button>
+                        <button 
+                          onClick={() => handleOpenViewer(project, false, 'SMI')}
+                          className="p-1 text-gray-400 hover:text-blue-650 hover:bg-blue-50 transition-colors shrink-0"
+                          title="SMI 번역본 파일 내용 미리보기"
+                        >
+                          <Eye size={12} />
+                        </button>
+                      </div>
                     </div>
 
                     <button 
@@ -441,6 +504,77 @@ export default function HistoryPage() {
           </div>
         </div>
       )}
+      {/* 자막 파일 내용 미리보기 뷰어 모달 */}
+      {viewFileModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl h-[75vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+              <div className="flex items-center gap-3">
+                <Languages className="text-purple-600" size={22} />
+                <div>
+                  <h2 className="text-base font-bold text-gray-800 line-clamp-1">
+                    {viewFileModal.project.title}
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    파일 포맷: <span className="font-extrabold text-purple-700">{viewFileModal.format}</span> • 구분: <span className="font-bold text-gray-700">{viewFileModal.isOriginal ? '원본 자막' : (langMap[viewFileModal.project.targetLang] || viewFileModal.project.targetLang) + ' 번역본'}</span>
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setViewFileModal(null)} 
+                className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* RAW Content Monospace Viewport */}
+            <div className="flex-1 overflow-auto p-4 bg-gray-900 relative">
+              <pre className="text-sm font-mono text-gray-200 whitespace-pre-wrap leading-relaxed select-all">
+                {viewFileModal.content}
+              </pre>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 border-t border-gray-250 bg-gray-50 flex items-center justify-between gap-3 shrink-0">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(viewFileModal.content);
+                  setIsCopied(true);
+                  setTimeout(() => setIsCopied(false), 2000);
+                }}
+                className={`flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-bold border rounded-lg transition-all shadow-sm active:scale-95 ${isCopied ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+              >
+                {isCopied ? <Check size={16} /> : <Clipboard size={16} />}
+                {isCopied ? '복사 완료!' : '클립보드 복사'}
+              </button>
+              
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (viewFileModal.format === 'SRT') {
+                      downloadSRT(viewFileModal.project, viewFileModal.isOriginal);
+                    } else {
+                      downloadSMI(viewFileModal.project, viewFileModal.isOriginal);
+                    }
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-5 py-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-all shadow-sm active:scale-95"
+                >
+                  <Download size={16} />
+                  자막 파일 다운로드
+                </button>
+                <button 
+                  onClick={() => setViewFileModal(null)}
+                  className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 시험지 다시 인쇄하기(미리보기) 모달 */}
       {printExam && (
         <div className="fixed inset-0 bg-gray-100 z-50 flex flex-col overflow-hidden print:bg-white">
