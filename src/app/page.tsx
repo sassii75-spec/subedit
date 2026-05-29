@@ -5,7 +5,7 @@ import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Sciss
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import Link from 'next/link';
 
 export type QuizItem = {
@@ -90,6 +90,12 @@ export default function Home() {
   
   // 실시간 더빙 상태
   const [isLiveDubbing, setIsLiveDubbing] = useState(false);
+  
+  // --- New states for tracking and saving edits ---
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectTitle, setProjectTitle] = useState<string | null>(null);
+  const [initialOriginalSubtitles, setInitialOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
+  const [initialTranslatedSubtitles, setInitialTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   
   // 스크롤 동기화를 위한 ref
   const originalListRef = useRef<HTMLDivElement>(null);
@@ -229,6 +235,7 @@ export default function Home() {
         await ffmpeg.deleteFile(chunkFileName);
       }
       
+      setInitialOriginalSubtitles([...allSegments]);
       setProgressMsg('자막 생성 완료!');
       setTimeout(() => setIsProcessing(false), 2000);
       
@@ -285,6 +292,7 @@ export default function Home() {
         }
       }
       
+      setInitialTranslatedSubtitles([...translatedAcc]);
       // 번역 완료 시 캐시에 저장
       setTranslationsCache(prev => ({
         ...prev,
@@ -396,25 +404,160 @@ export default function Home() {
     }));
   };
 
+  const getModifiedOriginalCount = () => {
+    if (initialOriginalSubtitles.length === 0) return 0;
+    return originalSubtitles.filter(sub => {
+      const init = initialOriginalSubtitles.find(i => i.id === sub.id);
+      return init && sub.text.trim() !== init.text.trim();
+    }).length;
+  };
+
+  const getModifiedTranslatedCount = () => {
+    if (initialTranslatedSubtitles.length === 0) return 0;
+    return translatedSubtitles.filter(sub => {
+      const init = initialTranslatedSubtitles.find(i => i.id === sub.id);
+      return init && sub.text.trim() !== init.text.trim();
+    }).length;
+  };
+
+  const handleSaveOriginal = async () => {
+    if (originalSubtitles.length === 0) {
+      alert("저장할 원본 자막이 없습니다.");
+      return;
+    }
+    
+    const modifiedCount = getModifiedOriginalCount();
+    
+    const confirmMsg = modifiedCount > 0 
+      ? `원본 자막 총 ${modifiedCount}개가 수정되었습니다. 저장하시겠습니까?`
+      : "수정된 원본 자막이 없습니다. 그래도 현재 상태를 저장하시겠습니까?";
+      
+    if (!confirm(confirmMsg)) return;
+
+    setIsSaving(true);
+    try {
+      if (projectId) {
+        const docRef = doc(db, 'subedit_history', projectId);
+        await updateDoc(docRef, {
+          originalSubtitles,
+          translatedSubtitles,
+          lastSavedAt: serverTimestamp(),
+        });
+        alert(`원본 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료)`);
+        setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
+      } else {
+        const title = prompt("저장할 작업의 제목을 입력하세요:", "새로운 번역 작업");
+        if (!title) {
+          setIsSaving(false);
+          return;
+        }
+        
+        const docRef = await addDoc(collection(db, 'subedit_history'), {
+          title,
+          targetLang,
+          originalSubtitles,
+          translatedSubtitles,
+          createdAt: serverTimestamp(),
+        });
+        
+        setProjectId(docRef.id);
+        setProjectTitle(title);
+        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영)`);
+        setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
+      }
+    } catch (err: any) {
+      console.error('Save Original Error:', err);
+      alert('저장 중 오류가 발생했습니다: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveTranslated = async () => {
+    if (translatedSubtitles.length === 0) {
+      alert("저장할 번역 자막이 없습니다. 먼저 번역을 진행해주세요.");
+      return;
+    }
+    
+    const modifiedCount = getModifiedTranslatedCount();
+    
+    const confirmMsg = modifiedCount > 0 
+      ? `번역 자막 총 ${modifiedCount}개가 수정되었습니다. 저장하시겠습니까?`
+      : "수정된 번역 자막이 없습니다. 그래도 현재 상태를 저장하시겠습니까?";
+      
+    if (!confirm(confirmMsg)) return;
+
+    setIsSaving(true);
+    try {
+      if (projectId) {
+        const docRef = doc(db, 'subedit_history', projectId);
+        await updateDoc(docRef, {
+          originalSubtitles,
+          translatedSubtitles,
+          lastSavedAt: serverTimestamp(),
+        });
+        alert(`번역 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료)`);
+        setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
+      } else {
+        const title = prompt("저장할 작업의 제목을 입력하세요:", "새로운 번역 작업");
+        if (!title) {
+          setIsSaving(false);
+          return;
+        }
+        
+        const docRef = await addDoc(collection(db, 'subedit_history'), {
+          title,
+          targetLang,
+          originalSubtitles,
+          translatedSubtitles,
+          createdAt: serverTimestamp(),
+        });
+        
+        setProjectId(docRef.id);
+        setProjectTitle(title);
+        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영)`);
+        setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
+      }
+    } catch (err: any) {
+      console.error('Save Translated Error:', err);
+      alert('저장 중 오류가 발생했습니다: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSaveToHistory = async () => {
     if (originalSubtitles.length === 0 || translatedSubtitles.length === 0) {
       alert('저장할 자막 데이터가 없습니다. 먼저 번역을 진행해주세요.');
       return;
     }
 
-    const title = prompt("저장할 작업의 제목을 입력하세요:", "새로운 번역 작업");
+    const title = prompt("저장할 작업의 제목을 입력하세요:", projectId ? (projectTitle || "새로운 번역 작업") : "새로운 번역 작업");
     if (!title) return;
 
     setIsSaving(true);
     try {
-      await addDoc(collection(db, 'subedit_history'), {
-        title,
-        targetLang,
-        originalSubtitles,
-        translatedSubtitles,
-        createdAt: serverTimestamp(),
-      });
-      alert('성공적으로 저장되었습니다!\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
+      if (projectId) {
+        const docRef = doc(db, 'subedit_history', projectId);
+        await updateDoc(docRef, {
+          title,
+          originalSubtitles,
+          translatedSubtitles,
+          lastSavedAt: serverTimestamp(),
+        });
+        alert('성공적으로 저장 및 업데이트되었습니다!\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
+      } else {
+        const docRef = await addDoc(collection(db, 'subedit_history'), {
+          title,
+          targetLang,
+          originalSubtitles,
+          translatedSubtitles,
+          createdAt: serverTimestamp(),
+        });
+        setProjectId(docRef.id);
+        setProjectTitle(title);
+        alert('성공적으로 저장되었습니다!\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
+      }
     } catch (err) {
       console.error('Save Error:', err);
       alert('저장 중 오류가 발생했습니다.');
@@ -1245,16 +1388,26 @@ export default function Home() {
                   원본 자막 (자동 감지)
                 </h2>
               </div>
-              {selectedSubtitles.size > 0 && (
+              <div className="flex items-center gap-2">
+                {selectedSubtitles.size > 0 && (
+                  <button
+                    onClick={handleMergeSelectedClips}
+                    disabled={isMerging}
+                    className="text-xs font-semibold px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+                  >
+                    {isMerging ? <Loader2 size={14} className="animate-spin" /> : <Combine size={14} />}
+                    선택된 {selectedSubtitles.size}개 구간 병합
+                  </button>
+                )}
                 <button
-                  onClick={handleMergeSelectedClips}
-                  disabled={isMerging}
-                  className="text-xs font-semibold px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+                  onClick={handleSaveOriginal}
+                  disabled={isSaving || originalSubtitles.length === 0}
+                  className="text-xs font-bold px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
                 >
-                  {isMerging ? <Loader2 size={14} className="animate-spin" /> : <Combine size={14} />}
-                  선택된 {selectedSubtitles.size}개 구간 병합
+                  <Upload size={13} />
+                  원본 저장 {getModifiedOriginalCount() > 0 ? `(총 ${getModifiedOriginalCount()}개 수정됨)` : ""}
                 </button>
-              )}
+              </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={originalListRef}>
@@ -1332,8 +1485,10 @@ export default function Home() {
                     // 캐시된 자막이 있으면 즉시 불러오고, 없으면 빈 배열로 초기화 (자동으로 '번역' 버튼을 유도)
                     if (translationsCache[newLang]) {
                       setTranslatedSubtitles(translationsCache[newLang]);
+                      setInitialTranslatedSubtitles(translationsCache[newLang]);
                     } else {
                       setTranslatedSubtitles([]);
+                      setInitialTranslatedSubtitles([]);
                     }
                   }}
                   className="text-sm font-bold text-gray-800 bg-transparent outline-none cursor-pointer border-b border-dashed border-gray-400 pb-0.5"
@@ -1348,7 +1503,7 @@ export default function Home() {
                   <option value="sw">스와힐리어 (Kiswahili)</option>
                 </select>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button 
                   onClick={handleTranslate}
                   disabled={isTranslating}
@@ -1358,12 +1513,21 @@ export default function Home() {
                   {isTranslating ? translateProgressMsg : 'AI 전체 번역'}
                 </button>
                 <div className="w-px h-4 bg-gray-300 mx-1" />
+                <button
+                  onClick={handleSaveTranslated}
+                  disabled={isSaving || translatedSubtitles.length === 0}
+                  className="text-xs font-bold px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                >
+                  <Upload size={13} />
+                  번역 저장 {getModifiedTranslatedCount() > 0 ? `(총 ${getModifiedTranslatedCount()}개 수정됨)` : ""}
+                </button>
+                <div className="w-px h-4 bg-gray-300 mx-1" />
                 <button 
                   onClick={handleSaveToHistory}
                   disabled={isSaving}
-                  className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isSaving ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-white bg-gray-800 border-gray-800 hover:bg-gray-700'}`}
+                  className={`px-3 py-1.5 text-xs font-medium border rounded transition-colors ${isSaving ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-white bg-gray-850 border-gray-850 hover:bg-gray-750'}`}
                 >
-                  {isSaving ? '저장 중...' : '작업 저장 후 다운로드'}
+                  {isSaving ? '저장 중...' : '전체 저장 (SRT/SMI)'}
                 </button>
               </div>
             </div>
