@@ -96,6 +96,7 @@ export default function Home() {
   const [projectTitle, setProjectTitle] = useState<string | null>(null);
   const [initialOriginalSubtitles, setInitialOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [initialTranslatedSubtitles, setInitialTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
+  const [detectedOriginalSubtitles, setDetectedOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [projectVersions, setProjectVersions] = useState<any[]>([]);
   const [isVersionsOpen, setIsVersionsOpen] = useState(false);
@@ -160,9 +161,11 @@ export default function Home() {
             
             const orig = data.originalSubtitles || [];
             const trans = data.translatedSubtitles || [];
+            const detected = data.detectedOriginalSubtitles || (data.versions?.[0]?.originalSubtitles) || orig;
             
             setOriginalSubtitles(orig);
             setTranslatedSubtitles(trans);
+            setDetectedOriginalSubtitles(JSON.parse(JSON.stringify(detected)));
             
             // 기준점도 불러온 데이터로 동기화
             setInitialOriginalSubtitles(JSON.parse(JSON.stringify(orig)));
@@ -203,9 +206,12 @@ export default function Home() {
   };
 
   const handleResetOriginal = () => {
-    if (originalSubtitles.length === 0) return;
-    if (confirm("원본 자막을 처음 상태로 되돌리시겠습니까? (수정한 모든 내용이 복구되며 저장하지 않은 변경사항은 사라집니다.)")) {
-      setOriginalSubtitles(JSON.parse(JSON.stringify(initialOriginalSubtitles)));
+    if (detectedOriginalSubtitles.length === 0) {
+      alert("되돌릴 최초 감지 자막이 없습니다.");
+      return;
+    }
+    if (confirm("원본 자막을 최초 감지된 상태(버전 0)로 되돌리시겠습니까? (수정한 모든 내용이 최초 감지 대본으로 복구됩니다.)")) {
+      setOriginalSubtitles(JSON.parse(JSON.stringify(detectedOriginalSubtitles)));
     }
   };
 
@@ -303,6 +309,7 @@ export default function Home() {
     setTranslatedSubtitles([]);
     setInitialOriginalSubtitles([]);
     setInitialTranslatedSubtitles([]);
+    setDetectedOriginalSubtitles([]);
 
     // 1. 영상 미리보기 및 길이 측정 설정
     const objectUrl = URL.createObjectURL(file);
@@ -392,6 +399,7 @@ export default function Home() {
       }
       
       setProgressMsg('자막 생성 완료!');
+      setDetectedOriginalSubtitles(JSON.parse(JSON.stringify(allSegments)));
       setTimeout(() => setIsProcessing(false), 2000);
       
     } catch (err: any) {
@@ -619,7 +627,8 @@ export default function Home() {
           originalSubtitles,
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
-          versions: updatedVersions
+          versions: updatedVersions,
+          detectedOriginalSubtitles
         });
         setProjectVersions(updatedVersions);
         alert(`원본 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
@@ -632,20 +641,30 @@ export default function Home() {
           return;
         }
         
-        const newVer = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const ver0 = {
+          versionId: "ver_0",
+          versionName: "버전 0 (최초 감지 원본)",
+          originalSubtitles: JSON.parse(JSON.stringify(detectedOriginalSubtitles)),
+          translatedSubtitles: [],
+          savedAt: new Date().toISOString()
+        };
+        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const updatedVersions = [ver0, ver1];
+
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
           targetLang,
           originalSubtitles,
           translatedSubtitles,
           createdAt: serverTimestamp(),
-          versions: [newVer]
+          versions: updatedVersions,
+          detectedOriginalSubtitles
         });
         
         setProjectId(docRef.id);
         setProjectTitle(title);
-        setProjectVersions([newVer]);
-        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영 및 최초 버전 등록)`);
+        setProjectVersions(updatedVersions);
+        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영 및 버전 0/버전 1 등록 완료)`);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
         setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
       }
@@ -685,7 +704,8 @@ export default function Home() {
           originalSubtitles,
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
-          versions: updatedVersions
+          versions: updatedVersions,
+          detectedOriginalSubtitles
         });
         setProjectVersions(updatedVersions);
         alert(`번역 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
@@ -698,20 +718,30 @@ export default function Home() {
           return;
         }
         
-        const newVer = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const ver0 = {
+          versionId: "ver_0",
+          versionName: "버전 0 (최초 감지 원본)",
+          originalSubtitles: JSON.parse(JSON.stringify(detectedOriginalSubtitles)),
+          translatedSubtitles: [],
+          savedAt: new Date().toISOString()
+        };
+        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const updatedVersions = [ver0, ver1];
+
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
           targetLang,
           originalSubtitles,
           translatedSubtitles,
           createdAt: serverTimestamp(),
-          versions: [newVer]
+          versions: updatedVersions,
+          detectedOriginalSubtitles
         });
         
         setProjectId(docRef.id);
         setProjectTitle(title);
-        setProjectVersions([newVer]);
-        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영 및 최초 버전 등록)`);
+        setProjectVersions(updatedVersions);
+        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영 및 버전 0/버전 1 등록 완료)`);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
         setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
       }
@@ -747,7 +777,8 @@ export default function Home() {
           originalSubtitles,
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
-          versions: updatedVersions
+          versions: updatedVersions,
+          detectedOriginalSubtitles
         });
         setProjectVersions(updatedVersions);
         setProjectTitle(title);
@@ -755,21 +786,31 @@ export default function Home() {
         setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
         alert('성공적으로 저장 및 업데이트되었습니다!\n(새 버전 등록 완료)\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
       } else {
-        const newVer = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const ver0 = {
+          versionId: "ver_0",
+          versionName: "버전 0 (최초 감지 원본)",
+          originalSubtitles: JSON.parse(JSON.stringify(detectedOriginalSubtitles)),
+          translatedSubtitles: [],
+          savedAt: new Date().toISOString()
+        };
+        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const updatedVersions = [ver0, ver1];
+
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
           targetLang,
           originalSubtitles,
           translatedSubtitles,
           createdAt: serverTimestamp(),
-          versions: [newVer]
+          versions: updatedVersions,
+          detectedOriginalSubtitles
         });
         setProjectId(docRef.id);
         setProjectTitle(title);
-        setProjectVersions([newVer]);
+        setProjectVersions(updatedVersions);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
         setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
-        alert('성공적으로 저장되었습니다!\n(최초 버전 등록 완료)\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
+        alert('성공적으로 저장되었습니다!\n(최초 버전 및 버전 0 등록 완료)\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
       }
     } catch (err) {
       console.error('Save Error:', err);
