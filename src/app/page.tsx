@@ -196,7 +196,7 @@ export default function Home() {
   }, []);
 
   const isOriginalModified = (id: number, text: string) => {
-    const init = initialOriginalSubtitles.find(i => i.id === id);
+    const init = detectedOriginalSubtitles.find(i => i.id === id);
     return init ? text.trim() !== init.text.trim() : false;
   };
 
