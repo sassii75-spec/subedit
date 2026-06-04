@@ -921,7 +921,7 @@ export default function Home() {
         if (isLiveDubbing) {
           window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(overlaySub.text);
-          const langMap: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', vi: 'vi-VN', my: 'my-MM', bn: 'bn-BD', sw: 'sw-TZ' };
+          const langMap: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', vi: 'vi-VN', my: 'my-MM', bn: 'bn-BD', mn: 'mn-MN' };
           utterance.lang = langMap[targetLangRef.current] || 'en-US';
           utterance.rate = 1.1; // 약간 빠르게 읽어싱크 맞춤
           window.speechSynthesis.speak(utterance);
@@ -1888,7 +1888,7 @@ export default function Home() {
                   <option value="vi">베트남어 (Tiếng Việt)</option>
                   <option value="my">미얀마어 (မြန်မာစာ)</option>
                   <option value="bn">벵골어 (বাংলা)</option>
-                  <option value="sw">스와힐리어 (Kiswahili)</option>
+                  <option value="mn">몽골어 (Mongolian)</option>
                 </select>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -2092,7 +2092,7 @@ export default function Home() {
                   <option value="vi">베트남어 (Tiếng Việt)</option>
                   <option value="my">미얀마어 (မြန်မာစာ)</option>
                   <option value="bn">벵골어 (বাংলা)</option>
-                  <option value="sw">스와힐리어 (Kiswahili)</option>
+                  <option value="mn">몽골어 (Mongolian)</option>
                 </select>
                 
                 <div className="w-px h-5 bg-gray-300 mx-2" />
@@ -2237,7 +2237,7 @@ export default function Home() {
                   <option value="vi">베트남어 번역</option>
                   <option value="my">미얀마어 번역</option>
                   <option value="bn">벵골어 번역</option>
-                  <option value="sw">스와힐리어 번역</option>
+                  <option value="mn">몽골어 번역</option>
                 </select>
                 <button 
                   onClick={toggleLiveCaption}

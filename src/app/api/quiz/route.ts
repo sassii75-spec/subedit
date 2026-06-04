@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       'vi': 'Vietnamese',
       'my': 'Burmese (Myanmar)',
       'bn': 'Bengali',
-      'sw': 'Swahili'
+      'mn': 'Mongolian'
     };
     
     const targetLangName = targetLang && targetLang !== 'none' ? langMap[targetLang] || targetLang : null;
