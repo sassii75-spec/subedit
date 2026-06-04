@@ -5,7 +5,7 @@ import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Sciss
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, getDocs, query, orderBy, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
 
 export type QuizItem = {
@@ -236,8 +236,29 @@ export default function Home() {
             setInitialOriginalSubtitles(JSON.parse(JSON.stringify(orig)));
             setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(trans)));
             
-            // 버전 목록 설정
-            setProjectVersions(data.versions || []);
+            // 버전 목록 설정 (서브컬렉션에서 로드 및 레거시 데이터 마이그레이션)
+            const versionsCol = collection(db, 'subedit_history', id, 'versions');
+            const versionsQuery = query(versionsCol, orderBy('savedAt', 'asc'));
+            const versionsSnap = await getDocs(versionsQuery);
+            const loadedVersions: any[] = [];
+            versionsSnap.forEach(vDoc => {
+              loadedVersions.push(vDoc.data());
+            });
+
+            let finalVersions = loadedVersions;
+            if (finalVersions.length === 0 && data.versions && data.versions.length > 0) {
+              finalVersions = data.versions;
+              data.versions.forEach(async (ver: any) => {
+                try {
+                  const verDocRef = doc(collection(db, 'subedit_history', id, 'versions'), ver.versionId || Math.random().toString(36).substring(7));
+                  await setDoc(verDocRef, ver);
+                } catch (migErr) {
+                  console.error("Migration error for version:", ver.versionId, migErr);
+                }
+              });
+            }
+
+            setProjectVersions(finalVersions);
             
             // 번역 캐시 업데이트
             setTranslationsCache(JSON.parse(JSON.stringify(transMap)));
@@ -712,7 +733,9 @@ export default function Home() {
         console.log("Creating new version...");
         const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
         console.log("New version created:", newVer);
-        const updatedVersions = [...projectVersions, newVer];
+        
+        const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
+        await setDoc(verDocRef, newVer);
 
         console.log("docRef initializing...");
         const docRef = doc(db, 'subedit_history', projectId);
@@ -724,11 +747,12 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
-          versions: updatedVersions,
+          versions: [], // clear main document versions field to avoid 1MB limit
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
         console.log("updateDoc completed.");
+        const updatedVersions = [...projectVersions, newVer];
         setProjectVersions(updatedVersions);
         alert(`원본 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
@@ -748,7 +772,6 @@ export default function Home() {
           savedAt: new Date().toISOString()
         };
         const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
-        const updatedVersions = [ver0, ver1];
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
@@ -758,12 +781,20 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           createdAt: serverTimestamp(),
-          versions: updatedVersions,
+          versions: [],
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
         
-        setProjectId(docRef.id);
+        const newProjId = docRef.id;
+
+        const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
+        await setDoc(ver0Ref, ver0);
+        const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
+        await setDoc(ver1Ref, ver1);
+
+        const updatedVersions = [ver0, ver1];
+        setProjectId(newProjId);
         setProjectTitle(title);
         setProjectVersions(updatedVersions);
         alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영 및 버전 0/버전 1 등록 완료)`);
@@ -799,7 +830,9 @@ export default function Home() {
     try {
       if (projectId) {
         const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
-        const updatedVersions = [...projectVersions, newVer];
+        
+        const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
+        await setDoc(verDocRef, newVer);
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
@@ -809,10 +842,11 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
-          versions: updatedVersions,
+          versions: [], // clear main document versions field to avoid 1MB limit
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
+        const updatedVersions = [...projectVersions, newVer];
         setProjectVersions(updatedVersions);
         alert(`번역 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
@@ -832,7 +866,6 @@ export default function Home() {
           savedAt: new Date().toISOString()
         };
         const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
-        const updatedVersions = [ver0, ver1];
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
@@ -842,12 +875,20 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           createdAt: serverTimestamp(),
-          versions: updatedVersions,
+          versions: [],
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
         
-        setProjectId(docRef.id);
+        const newProjId = docRef.id;
+
+        const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
+        await setDoc(ver0Ref, ver0);
+        const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
+        await setDoc(ver1Ref, ver1);
+
+        const updatedVersions = [ver0, ver1];
+        setProjectId(newProjId);
         setProjectTitle(title);
         setProjectVersions(updatedVersions);
         alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영 및 버전 0/버전 1 등록 완료)`);
@@ -878,7 +919,9 @@ export default function Home() {
     try {
       if (projectId) {
         const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
-        const updatedVersions = [...projectVersions, newVer];
+        
+        const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
+        await setDoc(verDocRef, newVer);
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
@@ -889,10 +932,11 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
-          versions: updatedVersions,
+          versions: [], // clear main document versions field to avoid 1MB limit
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
+        const updatedVersions = [...projectVersions, newVer];
         setProjectVersions(updatedVersions);
         setProjectTitle(title);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
@@ -907,7 +951,6 @@ export default function Home() {
           savedAt: new Date().toISOString()
         };
         const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
-        const updatedVersions = [ver0, ver1];
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
@@ -917,11 +960,20 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           createdAt: serverTimestamp(),
-          versions: updatedVersions,
+          versions: [],
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
-        setProjectId(docRef.id);
+        
+        const newProjId = docRef.id;
+
+        const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
+        await setDoc(ver0Ref, ver0);
+        const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
+        await setDoc(ver1Ref, ver1);
+
+        const updatedVersions = [ver0, ver1];
+        setProjectId(newProjId);
         setProjectTitle(title);
         setProjectVersions(updatedVersions);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
