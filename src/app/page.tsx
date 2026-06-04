@@ -1625,13 +1625,6 @@ export default function Home() {
             >
               <Upload size={48} className={`mb-4 transition-colors ${isDragging ? 'text-blue-400' : 'text-gray-500'}`} />
               <p className={`font-medium mb-2 transition-colors ${isDragging ? 'text-blue-300' : 'text-gray-400'}`}>편집할 영상 파일을 드래그 앤 드롭하거나 선택하세요 (MP4, WebM)</p>
-              <input 
-                type="file" 
-                accept="video/*" 
-                className="hidden" 
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-              />
               <button 
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isProcessing}
