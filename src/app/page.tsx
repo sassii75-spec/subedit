@@ -260,12 +260,12 @@ export default function Home() {
 
   const isOriginalModified = (id: number, text: string) => {
     const init = detectedOriginalSubtitles.find(i => i.id === id);
-    return init ? text.trim() !== init.text.trim() : false;
+    return init ? (text || '').trim() !== (init.text || '').trim() : false;
   };
 
   const isTranslatedModified = (id: number, text: string) => {
     const init = detectedTranslatedSubtitles.find(i => i.id === id);
-    return init ? text.trim() !== init.text.trim() : false;
+    return init ? (text || '').trim() !== (init.text || '').trim() : false;
   };
 
   const handleResetOriginal = () => {
@@ -655,7 +655,7 @@ export default function Home() {
     if (initialOriginalSubtitles.length === 0) return 0;
     return originalSubtitles.filter(sub => {
       const init = initialOriginalSubtitles.find(i => i.id === sub.id);
-      return init && sub.text.trim() !== init.text.trim();
+      return init && (sub.text || '').trim() !== (init.text || '').trim();
     }).length;
   };
 
@@ -663,7 +663,7 @@ export default function Home() {
     if (initialTranslatedSubtitles.length === 0) return 0;
     return translatedSubtitles.filter(sub => {
       const init = initialTranslatedSubtitles.find(i => i.id === sub.id);
-      return init && sub.text.trim() !== init.text.trim();
+      return init && (sub.text || '').trim() !== (init.text || '').trim();
     }).length;
   };
 
@@ -679,12 +679,21 @@ export default function Home() {
   };
 
   const handleSaveOriginal = async () => {
+    console.log("handleSaveOriginal called!");
     if (originalSubtitles.length === 0) {
       alert("저장할 원본 자막이 없습니다.");
       return;
     }
     
-    const modifiedCount = getModifiedOriginalCount();
+    console.log("Calculating modified count...");
+    let modifiedCount = 0;
+    try {
+      modifiedCount = getModifiedOriginalCount();
+      console.log("Modified count calculated:", modifiedCount);
+    } catch (e: any) {
+      console.error("Error in getModifiedOriginalCount:", e);
+      alert("getModifiedOriginalCount 에러 발생: " + e.message);
+    }
     
     const confirmMsg = modifiedCount > 0 
       ? `원본 자막 총 ${modifiedCount}개가 수정되었습니다. 저장하시겠습니까?`
@@ -692,16 +701,22 @@ export default function Home() {
       
     if (!confirm(confirmMsg)) return;
 
+    console.log("Asking for versionNote...");
     const versionNote = prompt("이번 저장 버전의 설명을 입력하세요 (예: 1차 원본 수정, 초안 완성 등):", "원본 자막 수정");
     if (versionNote === null) return; // 취소
 
     setIsSaving(true);
     try {
+      console.log("projectId:", projectId);
       if (projectId) {
+        console.log("Creating new version...");
         const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
+        console.log("New version created:", newVer);
         const updatedVersions = [...projectVersions, newVer];
 
+        console.log("docRef initializing...");
         const docRef = doc(db, 'subedit_history', projectId);
+        console.log("updateDoc calling...");
         await updateDoc(docRef, {
           targetLang,
           originalSubtitles,
@@ -713,6 +728,7 @@ export default function Home() {
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
+        console.log("updateDoc completed.");
         setProjectVersions(updatedVersions);
         alert(`원본 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
