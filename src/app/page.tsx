@@ -1650,6 +1650,36 @@ export default function Home() {
                 >
                   초기화
                 </button>
+                {projectVersions.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      const verId = e.target.value;
+                      if (!verId) return;
+                      const selectedVer = projectVersions.find(v => v.versionId === verId);
+                      if (selectedVer) {
+                        if (confirm(`"${selectedVer.versionName}" 버전을 작업공간으로 불러오시겠습니까?\n(현재 작업 중인 내용은 이 버전으로 덮어씌워집니다.)`)) {
+                          setOriginalSubtitles(JSON.parse(JSON.stringify(selectedVer.originalSubtitles || [])));
+                          setTranslatedSubtitles(JSON.parse(JSON.stringify(selectedVer.translatedSubtitles || [])));
+                          setInitialOriginalSubtitles(JSON.parse(JSON.stringify(selectedVer.originalSubtitles || [])));
+                          setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(selectedVer.translatedSubtitles || [])));
+                          alert(`"${selectedVer.versionName}" 버전을 성공적으로 불러왔습니다.`);
+                        }
+                      }
+                      e.target.value = "";
+                    }}
+                    className="text-xs font-bold px-2 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 outline-none cursor-pointer shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">버전 불러오기</option>
+                    {[...projectVersions].reverse().map((ver, idx) => {
+                      const dateStr = ver.savedAt ? new Date(ver.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                      return (
+                        <option key={ver.versionId || idx} value={ver.versionId}>
+                          {ver.versionName} {dateStr ? `(${dateStr})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
               </div>
             </div>
             
@@ -1769,6 +1799,14 @@ export default function Home() {
                   <Upload size={13} />
                   번역 저장 {getModifiedTranslatedCount() > 0 ? `(총 ${getModifiedTranslatedCount()}개 수정됨)` : ""}
                 </button>
+                <button
+                  onClick={handleResetTranslated}
+                  disabled={translatedSubtitles.length === 0}
+                  className="text-xs font-bold px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                  title="번역 자막을 최초 불러온 상태로 되돌립니다."
+                >
+                  초기화
+                </button>
                 <div className="w-px h-4 bg-gray-300 mx-1" />
                 <button 
                   onClick={handleSaveToHistory}
@@ -1777,6 +1815,39 @@ export default function Home() {
                 >
                   {isSaving ? '저장 중...' : '전체 저장 (SRT/SMI)'}
                 </button>
+                {projectVersions.length > 0 && (
+                  <>
+                    <div className="w-px h-4 bg-gray-300 mx-1" />
+                    <select
+                      onChange={(e) => {
+                        const verId = e.target.value;
+                        if (!verId) return;
+                        const selectedVer = projectVersions.find(v => v.versionId === verId);
+                        if (selectedVer) {
+                          if (confirm(`"${selectedVer.versionName}" 버전을 작업공간으로 불러오시겠습니까?\n(현재 작업 중인 내용은 이 버전으로 덮어씌워집니다.)`)) {
+                            setOriginalSubtitles(JSON.parse(JSON.stringify(selectedVer.originalSubtitles || [])));
+                            setTranslatedSubtitles(JSON.parse(JSON.stringify(selectedVer.translatedSubtitles || [])));
+                            setInitialOriginalSubtitles(JSON.parse(JSON.stringify(selectedVer.originalSubtitles || [])));
+                            setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(selectedVer.translatedSubtitles || [])));
+                            alert(`"${selectedVer.versionName}" 버전을 성공적으로 불러왔습니다.`);
+                          }
+                        }
+                        e.target.value = "";
+                      }}
+                      className="text-xs font-bold px-2 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 outline-none cursor-pointer shadow-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">버전 불러오기</option>
+                      {[...projectVersions].reverse().map((ver, idx) => {
+                        const dateStr = ver.savedAt ? new Date(ver.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+                        return (
+                          <option key={ver.versionId || idx} value={ver.versionId}>
+                            {ver.versionName} {dateStr ? `(${dateStr})` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </>
+                )}
               </div>
             </div>
 
