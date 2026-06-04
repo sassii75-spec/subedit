@@ -97,6 +97,8 @@ export default function Home() {
   const [initialOriginalSubtitles, setInitialOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [initialTranslatedSubtitles, setInitialTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [detectedOriginalSubtitles, setDetectedOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
+  const [detectedTranslatedSubtitles, setDetectedTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
+  const [detectedTranslationsCache, setDetectedTranslationsCache] = useState<Record<string, {id: number, start: string, end: string, text: string}[]>>({});
   const [isDragging, setIsDragging] = useState(false);
   const [projectVersions, setProjectVersions] = useState<any[]>([]);
   const [isVersionsOpen, setIsVersionsOpen] = useState(false);
@@ -161,6 +163,33 @@ export default function Home() {
     }
   }, [translatedSubtitles]);
 
+  // Reactive effect to dynamically build baseline for raw translated subtitles chunk-by-chunk (Version 0 translation)
+  useEffect(() => {
+    if (translatedSubtitles.length > 0) {
+      setDetectedTranslatedSubtitles(prev => {
+        if (prev.length === 0) return JSON.parse(JSON.stringify(translatedSubtitles));
+        const updated = [...prev];
+        let hasNew = false;
+        translatedSubtitles.forEach(sub => {
+          if (!prev.some(p => p.id === sub.id)) {
+            updated.push(JSON.parse(JSON.stringify(sub)));
+            hasNew = true;
+          }
+        });
+        if (hasNew) {
+          // Update baseline cache as well
+          setDetectedTranslationsCache(cache => ({
+            ...cache,
+            [targetLang]: updated
+          }));
+        }
+        return hasNew ? updated : prev;
+      });
+    } else {
+      setDetectedTranslatedSubtitles([]);
+    }
+  }, [translatedSubtitles, targetLang]);
+
   // URL에서 projectId 파라미터를 읽어 Firebase로부터 프로젝트 데이터를 로드
   useEffect(() => {
     const fetchProject = async () => {
@@ -182,10 +211,12 @@ export default function Home() {
             const orig = data.originalSubtitles || [];
             const trans = data.translatedSubtitles || [];
             const detected = data.detectedOriginalSubtitles || (data.versions?.[0]?.originalSubtitles) || orig;
+            const detectedTrans = data.detectedTranslatedSubtitles || trans;
             
             setOriginalSubtitles(orig);
             setTranslatedSubtitles(trans);
             setDetectedOriginalSubtitles(JSON.parse(JSON.stringify(detected)));
+            setDetectedTranslatedSubtitles(JSON.parse(JSON.stringify(detectedTrans)));
             
             // 기준점도 불러온 데이터로 동기화
             setInitialOriginalSubtitles(JSON.parse(JSON.stringify(orig)));
@@ -198,6 +229,10 @@ export default function Home() {
             setTranslationsCache(prev => ({
               ...prev,
               [data.targetLang || 'en']: trans
+            }));
+            setDetectedTranslationsCache(prev => ({
+              ...prev,
+              [data.targetLang || 'en']: JSON.parse(JSON.stringify(detectedTrans))
             }));
             
             alert(`"${data.title || '작업'}" 프로젝트를 성공적으로 불러왔습니다.`);
@@ -221,7 +256,7 @@ export default function Home() {
   };
 
   const isTranslatedModified = (id: number, text: string) => {
-    const init = initialTranslatedSubtitles.find(i => i.id === id);
+    const init = detectedTranslatedSubtitles.find(i => i.id === id);
     return init ? text.trim() !== init.text.trim() : false;
   };
 
@@ -236,9 +271,12 @@ export default function Home() {
   };
 
   const handleResetTranslated = () => {
-    if (translatedSubtitles.length === 0) return;
-    if (confirm("번역 자막을 처음 상태로 되돌리시겠습니까? (수정한 모든 내용이 복구되며 저장하지 않은 변경사항은 사라집니다.)")) {
-      setTranslatedSubtitles(JSON.parse(JSON.stringify(initialTranslatedSubtitles)));
+    if (detectedTranslatedSubtitles.length === 0) {
+      alert("되돌릴 최초 번역 자막이 없습니다.");
+      return;
+    }
+    if (confirm("번역 자막을 최초 번역된 상태로 되돌리시겠습니까? (수정한 모든 내용이 최초 번역 대본으로 복구됩니다.)")) {
+      setTranslatedSubtitles(JSON.parse(JSON.stringify(detectedTranslatedSubtitles)));
     }
   };
 
@@ -330,6 +368,8 @@ export default function Home() {
     setInitialOriginalSubtitles([]);
     setInitialTranslatedSubtitles([]);
     setDetectedOriginalSubtitles([]);
+    setDetectedTranslatedSubtitles([]);
+    setDetectedTranslationsCache({});
 
     // 1. 영상 미리보기 및 길이 측정 설정
     const objectUrl = URL.createObjectURL(file);
@@ -486,6 +526,10 @@ export default function Home() {
       setTranslationsCache(prev => ({
         ...prev,
         [targetLang]: translatedAcc
+      }));
+      setDetectedTranslationsCache(prev => ({
+        ...prev,
+        [targetLang]: JSON.parse(JSON.stringify(translatedAcc))
       }));
       
       setTranslateProgressMsg('번역 완료!');
@@ -648,7 +692,8 @@ export default function Home() {
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
           versions: updatedVersions,
-          detectedOriginalSubtitles
+          detectedOriginalSubtitles,
+          detectedTranslatedSubtitles
         });
         setProjectVersions(updatedVersions);
         alert(`원본 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
@@ -678,7 +723,8 @@ export default function Home() {
           translatedSubtitles,
           createdAt: serverTimestamp(),
           versions: updatedVersions,
-          detectedOriginalSubtitles
+          detectedOriginalSubtitles,
+          detectedTranslatedSubtitles
         });
         
         setProjectId(docRef.id);
@@ -725,7 +771,8 @@ export default function Home() {
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
           versions: updatedVersions,
-          detectedOriginalSubtitles
+          detectedOriginalSubtitles,
+          detectedTranslatedSubtitles
         });
         setProjectVersions(updatedVersions);
         alert(`번역 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
@@ -755,7 +802,8 @@ export default function Home() {
           translatedSubtitles,
           createdAt: serverTimestamp(),
           versions: updatedVersions,
-          detectedOriginalSubtitles
+          detectedOriginalSubtitles,
+          detectedTranslatedSubtitles
         });
         
         setProjectId(docRef.id);
@@ -798,7 +846,8 @@ export default function Home() {
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
           versions: updatedVersions,
-          detectedOriginalSubtitles
+          detectedOriginalSubtitles,
+          detectedTranslatedSubtitles
         });
         setProjectVersions(updatedVersions);
         setProjectTitle(title);
@@ -823,7 +872,8 @@ export default function Home() {
           translatedSubtitles,
           createdAt: serverTimestamp(),
           versions: updatedVersions,
-          detectedOriginalSubtitles
+          detectedOriginalSubtitles,
+          detectedTranslatedSubtitles
         });
         setProjectId(docRef.id);
         setProjectTitle(title);
@@ -1821,6 +1871,12 @@ export default function Home() {
                       setTranslatedSubtitles(translationsCache[newLang]);
                     } else {
                       setTranslatedSubtitles([]);
+                    }
+
+                    if (detectedTranslationsCache[newLang]) {
+                      setDetectedTranslatedSubtitles(detectedTranslationsCache[newLang]);
+                    } else {
+                      setDetectedTranslatedSubtitles([]);
                     }
                   }}
                   className="text-sm font-bold text-gray-800 bg-transparent outline-none cursor-pointer border-b border-dashed border-gray-400 pb-0.5"
