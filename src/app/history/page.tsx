@@ -12,6 +12,7 @@ interface SubtitleProject {
   targetLang: string;
   originalSubtitles: any[];
   translatedSubtitles: any[];
+  translations?: Record<string, any[]>;
   createdAt: any;
 }
 
@@ -29,8 +30,25 @@ export default function HistoryPage() {
   const [exams, setExams] = useState<ExamProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [previewProject, setPreviewProject] = useState<SubtitleProject | null>(null);
-  const [viewFileModal, setViewFileModal] = useState<{ project: SubtitleProject, isOriginal: boolean, format: 'SRT' | 'SMI', content: string } | null>(null);
+  const [viewFileModal, setViewFileModal] = useState<{ project: SubtitleProject, isOriginal: boolean, format: 'SRT' | 'SMI', content: string, langCode?: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [previewLang, setPreviewLang] = useState<string>('');
+
+  const getTranslatedLanguages = (project: SubtitleProject) => {
+    if (project.translations && Object.keys(project.translations).length > 0) {
+      return Object.keys(project.translations);
+    }
+    if (project.targetLang && project.translatedSubtitles && project.translatedSubtitles.length > 0) {
+      return [project.targetLang];
+    }
+    return [];
+  };
+
+  const handleOpenPreview = (project: SubtitleProject) => {
+    setPreviewProject(project);
+    const langs = getTranslatedLanguages(project);
+    setPreviewLang(langs[0] || project.targetLang || 'en');
+  };
 
   // 인쇄 전용 모달 상태
   const [printExam, setPrintExam] = useState<ExamProject | null>(null);
@@ -106,9 +124,16 @@ export default function HistoryPage() {
     return `${mm}${dd}_${hh}${min}`;
   };
 
-  const generateSRTContent = (project: SubtitleProject, isOriginal: boolean = false) => {
+  const generateSRTContent = (project: SubtitleProject, isOriginal: boolean = false, langCode?: string) => {
     let srtContent = '';
-    const targetSubtitles = isOriginal ? project.originalSubtitles : project.translatedSubtitles;
+    let targetSubtitles = [];
+    if (isOriginal) {
+      targetSubtitles = project.originalSubtitles || [];
+    } else if (langCode && project.translations && project.translations[langCode]) {
+      targetSubtitles = project.translations[langCode];
+    } else {
+      targetSubtitles = project.translatedSubtitles || [];
+    }
     targetSubtitles.forEach((sub, idx) => {
       srtContent += `${idx + 1}\n`;
       srtContent += `${formatSrtTime(sub.start)} --> ${formatSrtTime(sub.end)}\n`;
@@ -117,11 +142,18 @@ export default function HistoryPage() {
     return srtContent;
   };
 
-  const generateSMIContent = (project: SubtitleProject, isOriginal: boolean = false) => {
-    const targetSubtitles = isOriginal ? project.originalSubtitles : project.translatedSubtitles;
-    const langCode = isOriginal ? 'ko' : project.targetLang; // 원본은 주로 한국어/다국어, 포맷용으로 ko 유지
+  const generateSMIContent = (project: SubtitleProject, isOriginal: boolean = false, langCode?: string) => {
+    let targetSubtitles = [];
+    if (isOriginal) {
+      targetSubtitles = project.originalSubtitles || [];
+    } else if (langCode && project.translations && project.translations[langCode]) {
+      targetSubtitles = project.translations[langCode];
+    } else {
+      targetSubtitles = project.translatedSubtitles || [];
+    }
+    const activeLangCode = isOriginal ? 'ko' : (langCode || project.targetLang);
 
-    let smiContent = `<SAMI>\n<HEAD>\n<TITLE>${project.title}</TITLE>\n<STYLE TYPE="text/css">\n<!--\nP { font-family: Arial; font-size: 14pt; text-align: center; color: #FFFFFF; }\n.TRANS { Name: Subtitle; lang: ${langCode}; SAMIType: CC; }\n-->\n</STYLE>\n</HEAD>\n<BODY>\n`;
+    let smiContent = `<SAMI>\n<HEAD>\n<TITLE>${project.title}</TITLE>\n<STYLE TYPE="text/css">\n<!--\nP { font-family: Arial; font-size: 14pt; text-align: center; color: #FFFFFF; }\n.TRANS { Name: Subtitle; lang: ${activeLangCode}; SAMIType: CC; }\n-->\n</STYLE>\n</HEAD>\n<BODY>\n`;
 
     targetSubtitles.forEach((sub) => {
       const msStart = parseMs(sub.start);
@@ -134,9 +166,9 @@ export default function HistoryPage() {
     return smiContent;
   };
 
-  const downloadSRT = (project: SubtitleProject, isOriginal: boolean = false) => {
-    const content = generateSRTContent(project, isOriginal);
-    const langSuffix = isOriginal ? '원본' : project.targetLang;
+  const downloadSRT = (project: SubtitleProject, isOriginal: boolean = false, langCode?: string) => {
+    const content = generateSRTContent(project, isOriginal, langCode);
+    const langSuffix = isOriginal ? '원본' : (langCode || project.targetLang);
     
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -148,9 +180,9 @@ export default function HistoryPage() {
     document.body.removeChild(link);
   };
 
-  const downloadSMI = (project: SubtitleProject, isOriginal: boolean = false) => {
-    const content = generateSMIContent(project, isOriginal);
-    const langSuffix = isOriginal ? '원본' : project.targetLang;
+  const downloadSMI = (project: SubtitleProject, isOriginal: boolean = false, langCode?: string) => {
+    const content = generateSMIContent(project, isOriginal, langCode);
+    const langSuffix = isOriginal ? '원본' : (langCode || project.targetLang);
     
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -162,11 +194,11 @@ export default function HistoryPage() {
     document.body.removeChild(link);
   };
 
-  const handleOpenViewer = (project: SubtitleProject, isOriginal: boolean, format: 'SRT' | 'SMI') => {
+  const handleOpenViewer = (project: SubtitleProject, isOriginal: boolean, format: 'SRT' | 'SMI', langCode?: string) => {
     const content = format === 'SRT' 
-      ? generateSRTContent(project, isOriginal) 
-      : generateSMIContent(project, isOriginal);
-    setViewFileModal({ project, isOriginal, format, content });
+      ? generateSRTContent(project, isOriginal, langCode) 
+      : generateSMIContent(project, isOriginal, langCode);
+    setViewFileModal({ project, isOriginal, format, content, langCode });
     setIsCopied(false);
   };
 
@@ -298,7 +330,7 @@ export default function HistoryPage() {
                   </div>
 
                   <div 
-                    onClick={() => setPreviewProject(project)}
+                    onClick={() => handleOpenPreview(project)}
                     className="bg-gray-50 p-3 rounded-lg text-sm text-gray-600 mb-5 border border-gray-200 h-20 overflow-hidden relative cursor-pointer hover:bg-gray-100 hover:border-blue-300 transition-colors group"
                     title="전체 자막 미리보기"
                   >
@@ -348,43 +380,47 @@ export default function HistoryPage() {
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-blue-600 w-10 shrink-0 text-center bg-blue-50 border border-blue-100 rounded py-1">번역</span>
-                      {/* SRT Split Download & Preview */}
-                      <div className="flex-1 flex items-center border border-blue-200 rounded-md overflow-hidden bg-white">
-                        <button 
-                          onClick={() => downloadSRT(project, false)}
-                          className="flex-1 py-1.5 px-1 text-[11px] font-semibold text-blue-750 hover:bg-blue-50 border-r border-blue-100 transition-colors flex items-center justify-center gap-1"
-                          title="SRT 번역본 파일 직접 다운로드"
-                        >
-                          <Download size={11} /> .SRT
-                        </button>
-                        <button 
-                          onClick={() => handleOpenViewer(project, false, 'SRT')}
-                          className="p-1 text-gray-400 hover:text-blue-650 hover:bg-blue-50 transition-colors shrink-0"
-                          title="SRT 번역본 파일 내용 미리보기"
-                        >
-                          <Eye size={12} />
-                        </button>
+                    {getTranslatedLanguages(project).map((langCode) => (
+                      <div key={langCode} className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-blue-650 w-10 shrink-0 text-center bg-blue-50 border border-blue-100 rounded py-1 whitespace-nowrap overflow-hidden text-ellipsis font-bold" title={langMap[langCode] || langCode}>
+                          {langMap[langCode] || langCode}
+                        </span>
+                        {/* SRT Split Download & Preview */}
+                        <div className="flex-1 flex items-center border border-blue-200 rounded-md overflow-hidden bg-white">
+                          <button 
+                            onClick={() => downloadSRT(project, false, langCode)}
+                            className="flex-1 py-1.5 px-1 text-[11px] font-semibold text-blue-750 hover:bg-blue-50 border-r border-blue-100 transition-colors flex items-center justify-center gap-1"
+                            title={`${langMap[langCode] || langCode} SRT 번역본 직접 다운로드`}
+                          >
+                            <Download size={11} /> .SRT
+                          </button>
+                          <button 
+                            onClick={() => handleOpenViewer(project, false, 'SRT', langCode)}
+                            className="p-1 text-gray-400 hover:text-blue-655 hover:bg-blue-50 transition-colors shrink-0"
+                            title={`${langMap[langCode] || langCode} SRT 번역본 내용 미리보기`}
+                          >
+                            <Eye size={12} />
+                          </button>
+                        </div>
+                        {/* SMI Split Download & Preview */}
+                        <div className="flex-1 flex items-center border border-blue-200 rounded-md overflow-hidden bg-white">
+                          <button 
+                            onClick={() => downloadSMI(project, false, langCode)}
+                            className="flex-1 py-1.5 px-1 text-[11px] font-semibold text-blue-750 hover:bg-blue-50 border-r border-blue-100 transition-colors flex items-center justify-center gap-1"
+                            title={`${langMap[langCode] || langCode} SMI 번역본 직접 다운로드`}
+                          >
+                            <Download size={11} /> .SMI
+                          </button>
+                          <button 
+                            onClick={() => handleOpenViewer(project, false, 'SMI', langCode)}
+                            className="p-1 text-gray-400 hover:text-blue-655 hover:bg-blue-50 transition-colors shrink-0"
+                            title={`${langMap[langCode] || langCode} SMI 번역본 내용 미리보기`}
+                          >
+                            <Eye size={12} />
+                          </button>
+                        </div>
                       </div>
-                      {/* SMI Split Download & Preview */}
-                      <div className="flex-1 flex items-center border border-blue-200 rounded-md overflow-hidden bg-white">
-                        <button 
-                          onClick={() => downloadSMI(project, false)}
-                          className="flex-1 py-1.5 px-1 text-[11px] font-semibold text-blue-750 hover:bg-blue-50 border-r border-blue-100 transition-colors flex items-center justify-center gap-1"
-                          title="SMI 번역본 파일 직접 다운로드"
-                        >
-                          <Download size={11} /> .SMI
-                        </button>
-                        <button 
-                          onClick={() => handleOpenViewer(project, false, 'SMI')}
-                          className="p-1 text-gray-400 hover:text-blue-650 hover:bg-blue-50 transition-colors shrink-0"
-                          title="SMI 번역본 파일 내용 미리보기"
-                        >
-                          <Eye size={12} />
-                        </button>
-                      </div>
-                    </div>
+                    ))}
 
                     <Link 
                       href={`/?projectId=${project.id}`}
@@ -466,7 +502,20 @@ export default function HistoryPage() {
                 <List className="text-blue-600" size={24} />
                 <div>
                   <h2 className="text-lg font-bold text-gray-800 line-clamp-1">{previewProject.title}</h2>
-                  <p className="text-xs text-gray-500">{langMap[previewProject.targetLang] || previewProject.targetLang} 번역</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-gray-500">번역 언어 선택:</span>
+                    <select
+                      value={previewLang}
+                      onChange={(e) => setPreviewLang(e.target.value)}
+                      className="text-xs font-bold text-gray-700 bg-white rounded px-2 py-1 outline-none border border-gray-200 cursor-pointer focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {getTranslatedLanguages(previewProject).map((lang) => (
+                        <option key={lang} value={lang}>
+                          {langMap[lang] || lang}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               <button 
@@ -488,7 +537,12 @@ export default function HistoryPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {previewProject.originalSubtitles?.map((origSub, idx) => {
-                    const transSub = previewProject.translatedSubtitles?.[idx] || { text: '' };
+                    let transText = '';
+                    if (previewProject.translations && previewProject.translations[previewLang]) {
+                      transText = previewProject.translations[previewLang][idx]?.text || '';
+                    } else if (previewLang === previewProject.targetLang) {
+                      transText = previewProject.translatedSubtitles?.[idx]?.text || '';
+                    }
                     return (
                       <tr key={origSub.id || idx} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-xs font-mono text-gray-400 text-center whitespace-nowrap align-top pt-4">
@@ -500,7 +554,7 @@ export default function HistoryPage() {
                           {origSub.text}
                         </td>
                         <td className="px-4 py-3 text-[15px] font-medium text-gray-900 leading-relaxed align-top bg-blue-50/30">
-                          {transSub.text}
+                          {transText}
                         </td>
                       </tr>
                     );
@@ -523,7 +577,7 @@ export default function HistoryPage() {
                     {viewFileModal.project.title}
                   </h2>
                   <p className="text-xs text-gray-500">
-                    파일 포맷: <span className="font-extrabold text-purple-700">{viewFileModal.format}</span> • 구분: <span className="font-bold text-gray-700">{viewFileModal.isOriginal ? '원본 자막' : (langMap[viewFileModal.project.targetLang] || viewFileModal.project.targetLang) + ' 번역본'}</span>
+                    파일 포맷: <span className="font-extrabold text-purple-700">{viewFileModal.format}</span> • 구분: <span className="font-bold text-gray-700">{viewFileModal.isOriginal ? '원본 자막' : (langMap[viewFileModal.langCode || viewFileModal.project.targetLang] || viewFileModal.langCode || viewFileModal.project.targetLang) + ' 번역본'}</span>
                   </p>
                 </div>
               </div>

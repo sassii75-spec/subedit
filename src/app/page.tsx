@@ -653,12 +653,13 @@ export default function Home() {
     }).length;
   };
 
-  const createNewVersion = (note: string, orig: any[], trans: any[]) => {
+  const createNewVersion = (note: string, orig: any[], transCache: Record<string, any[]>) => {
     return {
       versionId: Math.random().toString(36).substring(7),
       versionName: note || `버전 ${projectVersions.length + 1}`,
       originalSubtitles: JSON.parse(JSON.stringify(orig)),
-      translatedSubtitles: JSON.parse(JSON.stringify(trans)),
+      translatedSubtitles: JSON.parse(JSON.stringify(transCache[targetLang] || [])),
+      translations: JSON.parse(JSON.stringify(transCache)),
       savedAt: new Date().toISOString()
     };
   };
@@ -683,13 +684,15 @@ export default function Home() {
     setIsSaving(true);
     try {
       if (projectId) {
-        const newVer = createNewVersion(versionNote, originalSubtitles, translatedSubtitles);
+        const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
         const updatedVersions = [...projectVersions, newVer];
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
           originalSubtitles,
           translatedSubtitles,
+          translations: translationsCache,
+          detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
           versions: updatedVersions,
           detectedOriginalSubtitles,
@@ -713,7 +716,7 @@ export default function Home() {
           translatedSubtitles: [],
           savedAt: new Date().toISOString()
         };
-        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
         const updatedVersions = [ver0, ver1];
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
@@ -721,6 +724,8 @@ export default function Home() {
           targetLang,
           originalSubtitles,
           translatedSubtitles,
+          translations: translationsCache,
+          detectedTranslations: detectedTranslationsCache,
           createdAt: serverTimestamp(),
           versions: updatedVersions,
           detectedOriginalSubtitles,
@@ -762,13 +767,15 @@ export default function Home() {
     setIsSaving(true);
     try {
       if (projectId) {
-        const newVer = createNewVersion(versionNote, originalSubtitles, translatedSubtitles);
+        const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
         const updatedVersions = [...projectVersions, newVer];
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
           originalSubtitles,
           translatedSubtitles,
+          translations: translationsCache,
+          detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
           versions: updatedVersions,
           detectedOriginalSubtitles,
@@ -792,7 +799,7 @@ export default function Home() {
           translatedSubtitles: [],
           savedAt: new Date().toISOString()
         };
-        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
         const updatedVersions = [ver0, ver1];
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
@@ -800,6 +807,8 @@ export default function Home() {
           targetLang,
           originalSubtitles,
           translatedSubtitles,
+          translations: translationsCache,
+          detectedTranslations: detectedTranslationsCache,
           createdAt: serverTimestamp(),
           versions: updatedVersions,
           detectedOriginalSubtitles,
@@ -836,7 +845,7 @@ export default function Home() {
     setIsSaving(true);
     try {
       if (projectId) {
-        const newVer = createNewVersion(versionNote, originalSubtitles, translatedSubtitles);
+        const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
         const updatedVersions = [...projectVersions, newVer];
 
         const docRef = doc(db, 'subedit_history', projectId);
@@ -844,6 +853,8 @@ export default function Home() {
           title,
           originalSubtitles,
           translatedSubtitles,
+          translations: translationsCache,
+          detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
           versions: updatedVersions,
           detectedOriginalSubtitles,
@@ -862,7 +873,7 @@ export default function Home() {
           translatedSubtitles: [],
           savedAt: new Date().toISOString()
         };
-        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
+        const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
         const updatedVersions = [ver0, ver1];
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
@@ -870,6 +881,8 @@ export default function Home() {
           targetLang,
           originalSubtitles,
           translatedSubtitles,
+          translations: translationsCache,
+          detectedTranslations: detectedTranslationsCache,
           createdAt: serverTimestamp(),
           versions: updatedVersions,
           detectedOriginalSubtitles,
@@ -1762,10 +1775,19 @@ export default function Home() {
                       const selectedVer = projectVersions.find(v => v.versionId === verId);
                       if (selectedVer) {
                         if (confirm(`"${selectedVer.versionName}" 버전을 작업공간으로 불러오시겠습니까?\n(현재 작업 중인 내용은 이 버전으로 덮어씌워집니다.)`)) {
+                          const verTranslations = selectedVer.translations || {};
+                          if (Object.keys(verTranslations).length === 0 && selectedVer.translatedSubtitles) {
+                            verTranslations[targetLang] = selectedVer.translatedSubtitles;
+                          }
+                          
                           setOriginalSubtitles(JSON.parse(JSON.stringify(selectedVer.originalSubtitles || [])));
-                          setTranslatedSubtitles(JSON.parse(JSON.stringify(selectedVer.translatedSubtitles || [])));
                           setInitialOriginalSubtitles(JSON.parse(JSON.stringify(selectedVer.originalSubtitles || [])));
-                          setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(selectedVer.translatedSubtitles || [])));
+                          
+                          setTranslationsCache(JSON.parse(JSON.stringify(verTranslations)));
+                          
+                          const activeTrans = verTranslations[targetLang] || [];
+                          setTranslatedSubtitles(JSON.parse(JSON.stringify(activeTrans)));
+                          setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(activeTrans)));
                           alert(`"${selectedVer.versionName}" 버전을 성공적으로 불러왔습니다.`);
                         }
                       }
@@ -1935,10 +1957,19 @@ export default function Home() {
                         const selectedVer = projectVersions.find(v => v.versionId === verId);
                         if (selectedVer) {
                           if (confirm(`"${selectedVer.versionName}" 버전을 작업공간으로 불러오시겠습니까?\n(현재 작업 중인 내용은 이 버전으로 덮어씌워집니다.)`)) {
+                            const verTranslations = selectedVer.translations || {};
+                            if (Object.keys(verTranslations).length === 0 && selectedVer.translatedSubtitles) {
+                              verTranslations[targetLang] = selectedVer.translatedSubtitles;
+                            }
+                            
                             setOriginalSubtitles(JSON.parse(JSON.stringify(selectedVer.originalSubtitles || [])));
-                            setTranslatedSubtitles(JSON.parse(JSON.stringify(selectedVer.translatedSubtitles || [])));
                             setInitialOriginalSubtitles(JSON.parse(JSON.stringify(selectedVer.originalSubtitles || [])));
-                            setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(selectedVer.translatedSubtitles || [])));
+                            
+                            setTranslationsCache(JSON.parse(JSON.stringify(verTranslations)));
+                            
+                            const activeTrans = verTranslations[targetLang] || [];
+                            setTranslatedSubtitles(JSON.parse(JSON.stringify(activeTrans)));
+                            setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(activeTrans)));
                             alert(`"${selectedVer.versionName}" 버전을 성공적으로 불러왔습니다.`);
                           }
                         }
@@ -2582,10 +2613,19 @@ export default function Home() {
                       <button
                         onClick={() => {
                           if (confirm(`"${ver.versionName}" 버전을 작업공간으로 불러오시겠습니까?\n(현재 작업 중인 내용은 이 버전으로 덮어씌워집니다.)`)) {
+                            const verTranslations = ver.translations || {};
+                            if (Object.keys(verTranslations).length === 0 && ver.translatedSubtitles) {
+                              verTranslations[targetLang] = ver.translatedSubtitles;
+                            }
+                            
                             setOriginalSubtitles(JSON.parse(JSON.stringify(ver.originalSubtitles || [])));
-                            setTranslatedSubtitles(JSON.parse(JSON.stringify(ver.translatedSubtitles || [])));
                             setInitialOriginalSubtitles(JSON.parse(JSON.stringify(ver.originalSubtitles || [])));
-                            setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(ver.translatedSubtitles || [])));
+                            
+                            setTranslationsCache(JSON.parse(JSON.stringify(verTranslations)));
+                            
+                            const activeTrans = verTranslations[targetLang] || [];
+                            setTranslatedSubtitles(JSON.parse(JSON.stringify(activeTrans)));
+                            setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(activeTrans)));
                             setIsVersionsOpen(false);
                             alert(`"${ver.versionName}" 버전을 성공적으로 불러왔습니다.`);
                           }
