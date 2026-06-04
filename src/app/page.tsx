@@ -284,7 +284,12 @@ export default function Home() {
       return;
     }
     if (confirm("번역 자막을 최초 번역된 상태로 되돌리시겠습니까? (수정한 모든 내용이 최초 번역 대본으로 복구됩니다.)")) {
-      setTranslatedSubtitles(JSON.parse(JSON.stringify(detectedTranslatedSubtitles)));
+      const resetSubs = JSON.parse(JSON.stringify(detectedTranslatedSubtitles));
+      setTranslatedSubtitles(resetSubs);
+      setTranslationsCache(prev => ({
+        ...prev,
+        [targetLang]: resetSubs
+      }));
     }
   };
 
@@ -377,6 +382,7 @@ export default function Home() {
     setInitialTranslatedSubtitles([]);
     setDetectedOriginalSubtitles([]);
     setDetectedTranslatedSubtitles([]);
+    setTranslationsCache({});
     setDetectedTranslationsCache({});
 
     // 1. 영상 미리보기 및 길이 측정 설정
@@ -697,6 +703,7 @@ export default function Home() {
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
+          targetLang,
           originalSubtitles,
           translatedSubtitles,
           translations: translationsCache,
@@ -780,6 +787,7 @@ export default function Home() {
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
+          targetLang,
           originalSubtitles,
           translatedSubtitles,
           translations: translationsCache,
@@ -859,6 +867,7 @@ export default function Home() {
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
           title,
+          targetLang,
           originalSubtitles,
           translatedSubtitles,
           translations: translationsCache,

@@ -338,7 +338,21 @@ export default function HistoryPage() {
                       <span className="text-[10px] font-bold text-blue-500 bg-white/80 px-2 py-0.5 rounded-full shadow-sm">전체 보기 클릭</span>
                     </div>
                     <span className="font-semibold text-gray-700">미리보기: </span>
-                    {project.translatedSubtitles?.[0]?.text || '번역 내용 없음...'}
+                    {(() => {
+                      if (project.translatedSubtitles?.[0]?.text) {
+                        return project.translatedSubtitles[0].text;
+                      }
+                      if (project.translations) {
+                        const keys = Object.keys(project.translations);
+                        if (keys.length > 0) {
+                          const firstLangSubs = project.translations[keys[0]];
+                          if (firstLangSubs && firstLangSubs[0]?.text) {
+                            return firstLangSubs[0].text;
+                          }
+                        }
+                      }
+                      return '번역 내용 없음...';
+                    })()}
                   </div>
                   
                   <div className="flex flex-col gap-2 mt-auto">
@@ -614,9 +628,9 @@ export default function HistoryPage() {
                 <button
                   onClick={() => {
                     if (viewFileModal.format === 'SRT') {
-                      downloadSRT(viewFileModal.project, viewFileModal.isOriginal);
+                      downloadSRT(viewFileModal.project, viewFileModal.isOriginal, viewFileModal.langCode);
                     } else {
-                      downloadSMI(viewFileModal.project, viewFileModal.isOriginal);
+                      downloadSMI(viewFileModal.project, viewFileModal.isOriginal, viewFileModal.langCode);
                     }
                   }}
                   className="flex items-center justify-center gap-1.5 px-5 py-2 text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-all shadow-sm active:scale-95"
