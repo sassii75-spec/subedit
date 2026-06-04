@@ -209,9 +209,23 @@ export default function Home() {
             setTargetLang(data.targetLang || 'en');
             
             const orig = data.originalSubtitles || [];
-            const trans = data.translatedSubtitles || [];
+            const transMap = data.translations || {};
+            const detectedTransMap = data.detectedTranslations || {};
+            const currentLang = data.targetLang || 'en';
+
+            // fallback for legacy single translation data
+            if (Object.keys(transMap).length === 0 && data.translatedSubtitles && data.translatedSubtitles.length > 0) {
+              transMap[currentLang] = data.translatedSubtitles;
+            }
+            if (Object.keys(detectedTransMap).length === 0 && data.detectedTranslatedSubtitles && data.detectedTranslatedSubtitles.length > 0) {
+              detectedTransMap[currentLang] = data.detectedTranslatedSubtitles;
+            } else if (Object.keys(detectedTransMap).length === 0 && data.translatedSubtitles && data.translatedSubtitles.length > 0) {
+              detectedTransMap[currentLang] = data.translatedSubtitles;
+            }
+
+            const trans = transMap[currentLang] || [];
+            const detectedTrans = detectedTransMap[currentLang] || [];
             const detected = data.detectedOriginalSubtitles || (data.versions?.[0]?.originalSubtitles) || orig;
-            const detectedTrans = data.detectedTranslatedSubtitles || trans;
             
             setOriginalSubtitles(orig);
             setTranslatedSubtitles(trans);
@@ -226,14 +240,8 @@ export default function Home() {
             setProjectVersions(data.versions || []);
             
             // 번역 캐시 업데이트
-            setTranslationsCache(prev => ({
-              ...prev,
-              [data.targetLang || 'en']: trans
-            }));
-            setDetectedTranslationsCache(prev => ({
-              ...prev,
-              [data.targetLang || 'en']: JSON.parse(JSON.stringify(detectedTrans))
-            }));
+            setTranslationsCache(JSON.parse(JSON.stringify(transMap)));
+            setDetectedTranslationsCache(JSON.parse(JSON.stringify(detectedTransMap)));
             
             alert(`"${data.title || '작업'}" 프로젝트를 성공적으로 불러왔습니다.`);
           } else {
