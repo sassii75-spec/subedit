@@ -121,6 +121,26 @@ export default function Home() {
     }
   }, [originalSubtitles]);
 
+  // Reactive effect to dynamically build baseline for raw detected subtitles chunk-by-chunk (Version 0)
+  useEffect(() => {
+    if (originalSubtitles.length > 0) {
+      setDetectedOriginalSubtitles(prev => {
+        if (prev.length === 0) return JSON.parse(JSON.stringify(originalSubtitles));
+        const updated = [...prev];
+        let hasNew = false;
+        originalSubtitles.forEach(sub => {
+          if (!prev.some(p => p.id === sub.id)) {
+            updated.push(JSON.parse(JSON.stringify(sub)));
+            hasNew = true;
+          }
+        });
+        return hasNew ? updated : prev;
+      });
+    } else {
+      setDetectedOriginalSubtitles([]);
+    }
+  }, [originalSubtitles]);
+
   // Reactive effect to dynamically build baseline for translated subtitles chunk-by-chunk
   useEffect(() => {
     if (translatedSubtitles.length > 0) {
