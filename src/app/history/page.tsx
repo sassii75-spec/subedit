@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List, Eye, Clipboard, Check } from 'lucide-react';
+import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List, Eye, Clipboard, Check, Play } from 'lucide-react';
 import Link from 'next/link';
 
 interface SubtitleProject {
@@ -386,9 +386,16 @@ export default function HistoryPage() {
                       </div>
                     </div>
 
+                    <Link 
+                      href={`/?projectId=${project.id}`}
+                      className="mt-2 flex justify-center items-center gap-1.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm font-bold shadow-sm"
+                    >
+                      <Play size={14} className="fill-current" /> 편집기로 불러오기
+                    </Link>
+
                     <button 
                       onClick={() => handleDelete(project.id, false)}
-                      className="mt-1 flex justify-center items-center gap-1.5 py-2 border border-red-200 text-red-500 rounded-md hover:bg-red-50 transition-colors text-sm font-semibold"
+                      className="mt-1 flex justify-center items-center gap-1.5 py-2 border border-red-200 text-red-500 rounded-md hover:bg-red-50 transition-colors text-sm font-semibold w-full"
                     >
                       <Trash2 size={16} /> 기록 삭제
                     </button>

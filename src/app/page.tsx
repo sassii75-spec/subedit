@@ -5,7 +5,7 @@ import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Sciss
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 
 export type QuizItem = {
@@ -96,6 +96,9 @@ export default function Home() {
   const [projectTitle, setProjectTitle] = useState<string | null>(null);
   const [initialOriginalSubtitles, setInitialOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [initialTranslatedSubtitles, setInitialTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [projectVersions, setProjectVersions] = useState<any[]>([]);
+  const [isVersionsOpen, setIsVersionsOpen] = useState(false);
 
   // Reactive effect to dynamically build baseline for original subtitles chunk-by-chunk
   useEffect(() => {
@@ -136,6 +139,113 @@ export default function Home() {
       setInitialTranslatedSubtitles([]);
     }
   }, [translatedSubtitles]);
+
+  // URL에서 projectId 파라미터를 읽어 Firebase로부터 프로젝트 데이터를 로드
+  useEffect(() => {
+    const fetchProject = async () => {
+      if (typeof window === 'undefined') return;
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('projectId');
+      if (id) {
+        setIsProcessing(true);
+        setProgressMsg('프로젝트 데이터를 가져오는 중...');
+        try {
+          const docRef = doc(db, 'subedit_history', id);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setProjectId(id);
+            setProjectTitle(data.title || '불러온 자막 작업');
+            setTargetLang(data.targetLang || 'en');
+            
+            const orig = data.originalSubtitles || [];
+            const trans = data.translatedSubtitles || [];
+            
+            setOriginalSubtitles(orig);
+            setTranslatedSubtitles(trans);
+            
+            // 기준점도 불러온 데이터로 동기화
+            setInitialOriginalSubtitles(JSON.parse(JSON.stringify(orig)));
+            setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(trans)));
+            
+            // 버전 목록 설정
+            setProjectVersions(data.versions || []);
+            
+            // 번역 캐시 업데이트
+            setTranslationsCache(prev => ({
+              ...prev,
+              [data.targetLang || 'en']: trans
+            }));
+            
+            alert(`"${data.title || '작업'}" 프로젝트를 성공적으로 불러왔습니다.`);
+          } else {
+            alert('보관함에서 해당 프로젝트를 찾을 수 없습니다.');
+          }
+        } catch (err: any) {
+          console.error('Error fetching project:', err);
+          alert('프로젝트를 불러오는 중 오류가 발생했습니다: ' + err.message);
+        } finally {
+          setIsProcessing(false);
+        }
+      }
+    };
+    fetchProject();
+  }, []);
+
+  const isOriginalModified = (id: number, text: string) => {
+    const init = initialOriginalSubtitles.find(i => i.id === id);
+    return init ? text.trim() !== init.text.trim() : false;
+  };
+
+  const isTranslatedModified = (id: number, text: string) => {
+    const init = initialTranslatedSubtitles.find(i => i.id === id);
+    return init ? text.trim() !== init.text.trim() : false;
+  };
+
+  const handleResetOriginal = () => {
+    if (originalSubtitles.length === 0) return;
+    if (confirm("원본 자막을 처음 상태로 되돌리시겠습니까? (수정한 모든 내용이 복구되며 저장하지 않은 변경사항은 사라집니다.)")) {
+      setOriginalSubtitles(JSON.parse(JSON.stringify(initialOriginalSubtitles)));
+    }
+  };
+
+  const handleResetTranslated = () => {
+    if (translatedSubtitles.length === 0) return;
+    if (confirm("번역 자막을 처음 상태로 되돌리시겠습니까? (수정한 모든 내용이 복구되며 저장하지 않은 변경사항은 사라집니다.)")) {
+      setTranslatedSubtitles(JSON.parse(JSON.stringify(initialTranslatedSubtitles)));
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      if (file.type.startsWith('video/')) {
+        await processFile(file);
+      } else {
+        alert('영상 파일만 업로드할 수 있습니다.');
+      }
+    }
+  };
   
   // 스크롤 동기화를 위한 ref
   const originalListRef = useRef<HTMLDivElement>(null);
@@ -184,9 +294,15 @@ export default function Home() {
     });
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const processFile = async (file: File) => {
+    // Reset project state for new video
+    setProjectId(null);
+    setProjectTitle(null);
+    setProjectVersions([]);
+    setOriginalSubtitles([]);
+    setTranslatedSubtitles([]);
+    setInitialOriginalSubtitles([]);
+    setInitialTranslatedSubtitles([]);
 
     // 1. 영상 미리보기 및 길이 측정 설정
     const objectUrl = URL.createObjectURL(file);
@@ -282,6 +398,13 @@ export default function Home() {
       console.error(err);
       alert('오류가 발생했습니다: ' + (err.message || err));
       setIsProcessing(false);
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await processFile(file);
     }
   };
 
@@ -458,6 +581,16 @@ export default function Home() {
     }).length;
   };
 
+  const createNewVersion = (note: string, orig: any[], trans: any[]) => {
+    return {
+      versionId: Math.random().toString(36).substring(7),
+      versionName: note || `버전 ${projectVersions.length + 1}`,
+      originalSubtitles: JSON.parse(JSON.stringify(orig)),
+      translatedSubtitles: JSON.parse(JSON.stringify(trans)),
+      savedAt: new Date().toISOString()
+    };
+  };
+
   const handleSaveOriginal = async () => {
     if (originalSubtitles.length === 0) {
       alert("저장할 원본 자막이 없습니다.");
@@ -472,17 +605,26 @@ export default function Home() {
       
     if (!confirm(confirmMsg)) return;
 
+    const versionNote = prompt("이번 저장 버전의 설명을 입력하세요 (예: 1차 원본 수정, 초안 완성 등):", "원본 자막 수정");
+    if (versionNote === null) return; // 취소
+
     setIsSaving(true);
     try {
       if (projectId) {
+        const newVer = createNewVersion(versionNote, originalSubtitles, translatedSubtitles);
+        const updatedVersions = [...projectVersions, newVer];
+
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
           originalSubtitles,
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
+          versions: updatedVersions
         });
-        alert(`원본 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료)`);
+        setProjectVersions(updatedVersions);
+        alert(`원본 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
+        setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
       } else {
         const title = prompt("저장할 작업의 제목을 입력하세요:", "새로운 번역 작업");
         if (!title) {
@@ -490,18 +632,22 @@ export default function Home() {
           return;
         }
         
+        const newVer = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
           targetLang,
           originalSubtitles,
           translatedSubtitles,
           createdAt: serverTimestamp(),
+          versions: [newVer]
         });
         
         setProjectId(docRef.id);
         setProjectTitle(title);
-        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영)`);
+        setProjectVersions([newVer]);
+        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영 및 최초 버전 등록)`);
         setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
+        setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
       }
     } catch (err: any) {
       console.error('Save Original Error:', err);
@@ -525,16 +671,25 @@ export default function Home() {
       
     if (!confirm(confirmMsg)) return;
 
+    const versionNote = prompt("이번 저장 버전의 설명을 입력하세요 (예: 번역 수정본, 검수 완료 등):", "번역 자막 수정");
+    if (versionNote === null) return; // 취소
+
     setIsSaving(true);
     try {
       if (projectId) {
+        const newVer = createNewVersion(versionNote, originalSubtitles, translatedSubtitles);
+        const updatedVersions = [...projectVersions, newVer];
+
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
           originalSubtitles,
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
+          versions: updatedVersions
         });
-        alert(`번역 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료)`);
+        setProjectVersions(updatedVersions);
+        alert(`번역 자막이 성공적으로 저장되었습니다.\n(총 ${modifiedCount}개 자막 수정 반영 완료 및 새 버전 등록)`);
+        setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
         setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
       } else {
         const title = prompt("저장할 작업의 제목을 입력하세요:", "새로운 번역 작업");
@@ -543,17 +698,21 @@ export default function Home() {
           return;
         }
         
+        const newVer = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
           targetLang,
           originalSubtitles,
           translatedSubtitles,
           createdAt: serverTimestamp(),
+          versions: [newVer]
         });
         
         setProjectId(docRef.id);
         setProjectTitle(title);
-        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영)`);
+        setProjectVersions([newVer]);
+        alert(`성공적으로 저장되었습니다!\n(프로젝트명: "${title}" | 총 ${modifiedCount}개 자막 수정 반영 및 최초 버전 등록)`);
+        setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
         setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
       }
     } catch (err: any) {
@@ -573,28 +732,44 @@ export default function Home() {
     const title = prompt("저장할 작업의 제목을 입력하세요:", projectId ? (projectTitle || "새로운 번역 작업") : "새로운 번역 작업");
     if (!title) return;
 
+    const versionNote = prompt("이번 저장 버전의 설명을 입력하세요 (예: 최종 저장, 다운로드용 등):", "전체 저장");
+    if (versionNote === null) return; // 취소
+
     setIsSaving(true);
     try {
       if (projectId) {
+        const newVer = createNewVersion(versionNote, originalSubtitles, translatedSubtitles);
+        const updatedVersions = [...projectVersions, newVer];
+
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
           title,
           originalSubtitles,
           translatedSubtitles,
           lastSavedAt: serverTimestamp(),
+          versions: updatedVersions
         });
-        alert('성공적으로 저장 및 업데이트되었습니다!\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
+        setProjectVersions(updatedVersions);
+        setProjectTitle(title);
+        setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
+        setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
+        alert('성공적으로 저장 및 업데이트되었습니다!\n(새 버전 등록 완료)\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
       } else {
+        const newVer = createNewVersion(versionNote || "최초 저장", originalSubtitles, translatedSubtitles);
         const docRef = await addDoc(collection(db, 'subedit_history'), {
           title,
           targetLang,
           originalSubtitles,
           translatedSubtitles,
           createdAt: serverTimestamp(),
+          versions: [newVer]
         });
         setProjectId(docRef.id);
         setProjectTitle(title);
-        alert('성공적으로 저장되었습니다!\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
+        setProjectVersions([newVer]);
+        setInitialOriginalSubtitles(JSON.parse(JSON.stringify(originalSubtitles)));
+        setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(translatedSubtitles)));
+        alert('성공적으로 저장되었습니다!\n(최초 버전 등록 완료)\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
       }
     } catch (err) {
       console.error('Save Error:', err);
@@ -1218,6 +1393,19 @@ export default function Home() {
             <span className="text-white font-black text-lg">U</span>
           </div>
           <h1 className="text-xl font-black tracking-tight text-purple-700">UNICON Creator</h1>
+          {projectId && (
+            <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-300">
+              <span className="text-sm font-bold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md max-w-[200px] truncate" title={projectTitle || '작업'}>
+                {projectTitle}
+              </span>
+              <button 
+                onClick={() => setIsVersionsOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm active:scale-95 cursor-pointer"
+              >
+                버전 기록 ({projectVersions.length})
+              </button>
+            </div>
+          )}
         </div>
         
         <div className="flex items-center gap-3">
@@ -1364,9 +1552,18 @@ export default function Home() {
         {/* Top Pane: Video Player */}
         <section className="flex-none h-[60vh] bg-[#1a1b26] border-b border-gray-300 relative flex flex-col items-center justify-center p-4">
           {!videoSrc ? (
-            <div className="w-full h-full border-2 border-dashed border-gray-600 rounded-xl flex flex-col items-center justify-center bg-gray-800/30">
-              <Upload size={48} className="text-gray-500 mb-4" />
-              <p className="text-gray-400 font-medium mb-2">편집할 영상 파일을 업로드하세요 (MP4, WebM)</p>
+            <div 
+              onDragOver={handleDragOver}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`w-full h-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all duration-200
+                ${isDragging 
+                  ? 'border-blue-500 bg-blue-500/10 scale-[0.98]' 
+                  : 'border-gray-600 bg-gray-800/30'}`}
+            >
+              <Upload size={48} className={`mb-4 transition-colors ${isDragging ? 'text-blue-400' : 'text-gray-500'}`} />
+              <p className={`font-medium mb-2 transition-colors ${isDragging ? 'text-blue-300' : 'text-gray-400'}`}>편집할 영상 파일을 드래그 앤 드롭하거나 선택하세요 (MP4, WebM)</p>
               <input 
                 type="file" 
                 accept="video/*" 
@@ -1445,6 +1642,14 @@ export default function Home() {
                   <Upload size={13} />
                   원본 저장 {getModifiedOriginalCount() > 0 ? `(총 ${getModifiedOriginalCount()}개 수정됨)` : ""}
                 </button>
+                <button
+                  onClick={handleResetOriginal}
+                  disabled={originalSubtitles.length === 0}
+                  className="text-xs font-bold px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                  title="원본 자막을 최초 불러온 상태로 되돌립니다."
+                >
+                  초기화
+                </button>
               </div>
             </div>
             
@@ -1457,12 +1662,17 @@ export default function Home() {
                 originalSubtitles.map((sub) => {
                   const isActive = sub.id === activeSubtitleId;
                   const isChecked = selectedSubtitles.has(sub.id);
+                  const isMod = isOriginalModified(sub.id, sub.text);
                   return (
                     <div 
                       key={sub.id} 
                       id={`orig-${sub.id}`}
                       className={`flex gap-3 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-blue-400
-                        ${isActive ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-transparent hover:border-gray-200'}
+                        ${isActive 
+                          ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' 
+                          : isMod 
+                            ? 'bg-amber-50/30 border-amber-200 hover:border-amber-300' 
+                            : 'bg-white border-transparent hover:border-gray-200'}
                         ${isChecked ? 'border-blue-400 bg-blue-50' : ''}`}
                     >
                       <div className="flex flex-col items-center justify-start pt-2">
@@ -1486,7 +1696,9 @@ export default function Home() {
                         <span className="hover:underline">{sub.start}</span>
                       </div>
                       <textarea 
-                        className={`flex-1 w-full bg-transparent resize-none outline-none text-[15px] leading-relaxed min-h-[44px] ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}`}
+                        className={`flex-1 w-full bg-transparent resize-none outline-none text-[15px] leading-relaxed min-h-[44px] 
+                          ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}
+                          ${isMod ? 'font-bold text-amber-900' : ''}`}
                         value={sub.text}
                         onChange={(e) => handleOriginalSubtitleEdit(sub.id, e.target.value)}
                         rows={2}
@@ -1578,12 +1790,17 @@ export default function Home() {
                 translatedSubtitles.map((sub) => {
                   const isActive = sub.id === activeSubtitleId;
                   const isChecked = selectedSubtitles.has(sub.id);
+                  const isMod = isTranslatedModified(sub.id, sub.text);
                   return (
                     <div 
                       key={sub.id} 
                       id={`trans-${sub.id}`}
                       className={`flex gap-3 p-3 rounded-lg border transition-all shadow-sm group focus-within:ring-2 focus-within:ring-green-400
-                        ${isActive ? 'bg-green-50 border-green-300 ring-1 ring-green-200' : 'bg-white border-transparent hover:border-gray-200'}
+                        ${isActive 
+                          ? 'bg-green-50 border-green-300 ring-1 ring-green-200' 
+                          : isMod 
+                            ? 'bg-amber-50/30 border-amber-200 hover:border-amber-300' 
+                            : 'bg-white border-transparent hover:border-gray-200'}
                         ${isChecked ? 'border-blue-400 bg-blue-50' : ''}`}
                     >
                       <div className="flex flex-col items-center justify-start pt-2">
@@ -1607,7 +1824,9 @@ export default function Home() {
                         <span className="hover:underline">{sub.start}</span>
                       </div>
                       <textarea 
-                        className={`flex-1 w-full bg-transparent resize-none outline-none text-[15px] leading-relaxed min-h-[44px] ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}`}
+                        className={`flex-1 w-full bg-transparent resize-none outline-none text-[15px] leading-relaxed min-h-[44px] 
+                          ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}
+                          ${isMod ? 'font-bold text-amber-900' : ''}`}
                         value={sub.text}
                         onChange={(e) => handleSubtitleEdit(sub.id, e.target.value)}
                         rows={2}
@@ -2131,6 +2350,82 @@ export default function Home() {
             {/* 인쇄용 고정 푸터 (인쇄 시 모든 페이지 하단에 출력됨) */}
             <div className="hidden print:block fixed bottom-4 w-full text-center text-[11px] text-gray-500 font-bold" style={{ fontFamily: '"Batang", "KoPub Batang", serif' }}>
               - {examTitle || '시험지'} -
+            </div>
+          </div>
+        </div>
+      )}
+      {/* 버전 기록 모달 */}
+      {isVersionsOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[50] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl h-[60vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+              <div className="flex items-center gap-3">
+                <Settings className="text-blue-600 animate-spin-slow" size={22} />
+                <div>
+                  <h2 className="text-base font-bold text-gray-800">
+                    프로젝트 버전 기록
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    현재 프로젝트: <span className="font-extrabold text-blue-700">{projectTitle}</span>
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsVersionsOpen(false)} 
+                className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Versions List */}
+            <div className="flex-1 overflow-auto p-4 space-y-3 bg-gray-50">
+              {projectVersions.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-gray-400">
+                  저장된 버전 내역이 없습니다. 자막을 저장하면 새 버전이 등록됩니다.
+                </div>
+              ) : (
+                [...projectVersions].reverse().map((ver, idx) => {
+                  const savedDate = ver.savedAt ? new Date(ver.savedAt).toLocaleString() : '날짜 정보 없음';
+                  return (
+                    <div key={ver.versionId || idx} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4 hover:shadow-md transition-shadow">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-black text-gray-800">
+                          {ver.versionName}
+                        </span>
+                        <span className="text-xs text-gray-450">
+                          저장 일시: {savedDate} • 원본: {ver.originalSubtitles?.length || 0}개 • 번역: {ver.translatedSubtitles?.length || 0}개
+                        </span>
+                      </div>
+                      
+                      <button
+                        onClick={() => {
+                          if (confirm(`"${ver.versionName}" 버전을 작업공간으로 불러오시겠습니까?\n(현재 작업 중인 내용은 이 버전으로 덮어씌워집니다.)`)) {
+                            setOriginalSubtitles(JSON.parse(JSON.stringify(ver.originalSubtitles || [])));
+                            setTranslatedSubtitles(JSON.parse(JSON.stringify(ver.translatedSubtitles || [])));
+                            setInitialOriginalSubtitles(JSON.parse(JSON.stringify(ver.originalSubtitles || [])));
+                            setInitialTranslatedSubtitles(JSON.parse(JSON.stringify(ver.translatedSubtitles || [])));
+                            setIsVersionsOpen(false);
+                            alert(`"${ver.versionName}" 버전을 성공적으로 불러왔습니다.`);
+                          }
+                        }}
+                        className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-sm active:scale-95"
+                      >
+                        버전 불러오기
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
+              <button 
+                onClick={() => setIsVersionsOpen(false)}
+                className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+              >
+                닫기
+              </button>
             </div>
           </div>
         </div>
