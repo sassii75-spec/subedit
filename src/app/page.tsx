@@ -36,6 +36,135 @@ const parseMs = (timeStr: string) => {
   return 0;
 };
 
+const parseSmi = (text: string): { id: number, start: string, end: string, text: string }[] => {
+  const syncRegex = /<SYNC\s+Start\s*=\s*["']?(\d+)["']?[^>]*>([\s\S]*?)(?=<SYNC|<\/BODY|<\/SAMI|$)/gi;
+  const items: { startMs: number; text: string }[] = [];
+  let match;
+  while ((match = syncRegex.exec(text)) !== null) {
+    const startMs = parseInt(match[1], 10);
+    let rawText = match[2];
+    let cleanedText = rawText.replace(/<br\s*\/?>/gi, '\n');
+    cleanedText = cleanedText.replace(/<[^>]+>/g, '');
+    cleanedText = cleanedText
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .trim();
+    items.push({ startMs, text: cleanedText });
+  }
+
+  const subtitles: { id: number, start: string, end: string, text: string }[] = [];
+  let currentSub: { id: number, start: string, startMs: number, text: string } | null = null;
+  let globalId = 0;
+
+  const formatMsTime = (ms: number) => {
+    const seconds = ms / 1000;
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const hasText = item.text && item.text !== ' ' && item.text !== '';
+
+    if (currentSub) {
+      const endStr = formatMsTime(item.startMs);
+      if (currentSub.text) {
+        subtitles.push({
+          id: currentSub.id,
+          start: currentSub.start,
+          end: endStr,
+          text: currentSub.text
+        });
+      }
+      currentSub = null;
+    }
+
+    if (hasText) {
+      currentSub = {
+        id: globalId++,
+        start: formatMsTime(item.startMs),
+        startMs: item.startMs,
+        text: item.text
+      };
+    }
+  }
+
+  if (currentSub && currentSub.text) {
+    subtitles.push({
+      id: currentSub.id,
+      start: currentSub.start,
+      end: formatMsTime(currentSub.startMs + 3000),
+      text: currentSub.text
+    });
+  }
+
+  return subtitles;
+};
+
+const parseSrt = (text: string): { id: number, start: string, end: string, text: string }[] => {
+  const blocks = text.trim().split(/\r?\n\r?\n/);
+  const subtitles: { id: number, start: string, end: string, text: string }[] = [];
+  let globalId = 0;
+
+  const formatSecTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const parseSrtTimestamp = (timeStr: string): number => {
+    const [hms, msStr] = timeStr.trim().replace('.', ',').split(',');
+    const parts = hms.split(':').map(Number);
+    let seconds = 0;
+    if (parts.length === 3) {
+      seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      seconds = parts[0] * 60 + parts[1];
+    }
+    const ms = msStr ? parseInt(msStr, 10) : 0;
+    return seconds + ms / 1000;
+  };
+
+  blocks.forEach((block) => {
+    const lines = block.split(/\r?\n/);
+    if (lines.length >= 2) {
+      const timeLineIdx = lines.findIndex(line => line.includes('-->'));
+      if (timeLineIdx !== -1) {
+        const timeLine = lines[timeLineIdx];
+        const textLines = lines.slice(timeLineIdx + 1);
+        const [startStr, endStr] = timeLine.split('-->');
+
+        if (startStr && endStr) {
+          const startSeconds = parseSrtTimestamp(startStr);
+          const endSeconds = parseSrtTimestamp(endStr);
+
+          subtitles.push({
+            id: globalId++,
+            start: formatSecTime(startSeconds),
+            end: formatSecTime(endSeconds),
+            text: textLines.join('\n').trim()
+          });
+        }
+      }
+    }
+  });
+
+  return subtitles;
+};
+
+
 export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [originalSubtitles, setOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
@@ -340,7 +469,12 @@ export default function Home() {
       if (file.type.startsWith('video/')) {
         await processFile(file);
       } else {
-        alert('영상 파일만 업로드할 수 있습니다.');
+        const ext = file.name.toLowerCase().split('.').pop();
+        if (ext === 'smi' || ext === 'srt') {
+          await processSubtitleFile(file);
+        } else {
+          alert('영상 파일 또는 SMI/SRT 자막 파일만 업로드할 수 있습니다.');
+        }
       }
     }
   };
@@ -504,16 +638,73 @@ export default function Home() {
     }
   };
 
+  const processSubtitleFile = async (file: File) => {
+    // Reset project state for new subtitles
+    setProjectId(null);
+    setProjectTitle(file.name.replace(/\.(smi|srt)$/i, ''));
+    setProjectVersions([]);
+    setOriginalSubtitles([]);
+    setTranslatedSubtitles([]);
+    setInitialOriginalSubtitles([]);
+    setInitialTranslatedSubtitles([]);
+    setDetectedOriginalSubtitles([]);
+    setDetectedTranslatedSubtitles([]);
+    setTranslationsCache({});
+    setDetectedTranslationsCache({});
+    setVideoSrc(null); // No video
+
+    setIsProcessing(true);
+    setProgressMsg('자막 파일 읽는 중...');
+
+    try {
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result;
+          if (typeof result === 'string') resolve(result);
+          else reject(new Error('파일 읽기 실패'));
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file, 'utf-8');
+      });
+
+      const isSmi = file.name.toLowerCase().endsWith('.smi');
+      setProgressMsg(isSmi ? 'SMI 자막 분석 중...' : 'SRT 자막 분석 중...');
+      
+      const parsedSubs = isSmi ? parseSmi(text) : parseSrt(text);
+
+      if (parsedSubs.length === 0) {
+        throw new Error('자막 파일에서 자막을 찾을 수 없거나 올바르지 않은 형식입니다.');
+      }
+
+      setOriginalSubtitles(parsedSubs);
+      setDetectedOriginalSubtitles(JSON.parse(JSON.stringify(parsedSubs)));
+      setInitialOriginalSubtitles(JSON.parse(JSON.stringify(parsedSubs)));
+
+      setProgressMsg('자막 로드 완료!');
+      setTimeout(() => setIsProcessing(false), 1000);
+    } catch (err: any) {
+      console.error(err);
+      alert('자막 파일 처리 중 오류가 발생했습니다: ' + err.message);
+      setIsProcessing(false);
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      await processFile(file);
+      const ext = file.name.toLowerCase().split('.').pop();
+      if (ext === 'smi' || ext === 'srt') {
+        await processSubtitleFile(file);
+      } else {
+        await processFile(file);
+      }
     }
   };
 
   const handleTranslate = async () => {
     if (originalSubtitles.length === 0) {
-      alert('먼저 영상을 업로드하여 원본 자막을 생성해주세요.');
+      alert('먼저 영상이나 자막 파일을 업로드하여 원본 자막을 등록해주세요.');
       return;
     }
 
@@ -600,7 +791,7 @@ export default function Home() {
 
   const handleGenerateQuiz = async () => {
     if (originalSubtitles.length === 0) {
-      alert('원본 자막 대본이 없습니다. 영상을 먼저 업로드해주세요.');
+      alert('원본 자막 대본이 없습니다. 먼저 영상이나 자막 파일을 업로드해주세요.');
       return;
     }
     setIsGeneratingQuiz(true);
@@ -1693,7 +1884,7 @@ export default function Home() {
           
           <input 
             type="file" 
-            accept="video/*" 
+            accept="video/*,.smi,.srt" 
             ref={fileInputRef} 
             onChange={handleFileUpload} 
             className="hidden" 
@@ -1704,7 +1895,7 @@ export default function Home() {
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors ${isProcessing ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
             {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} 
-            {isProcessing ? progressMsg : '영상 업로드'}
+            {isProcessing ? progressMsg : '파일 업로드'}
           </button>
           
           <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
@@ -1761,27 +1952,70 @@ export default function Home() {
         {/* Top Pane: Video Player */}
         <section className="flex-none h-[60vh] bg-[#1a1b26] border-b border-gray-300 relative flex flex-col items-center justify-center p-4">
           {!videoSrc ? (
-            <div 
-              onDragOver={handleDragOver}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`w-full h-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all duration-200
-                ${isDragging 
-                  ? 'border-blue-500 bg-blue-500/10 scale-[0.98]' 
-                  : 'border-gray-600 bg-gray-800/30'}`}
-            >
-              <Upload size={48} className={`mb-4 transition-colors ${isDragging ? 'text-blue-400' : 'text-gray-500'}`} />
-              <p className={`font-medium mb-2 transition-colors ${isDragging ? 'text-blue-300' : 'text-gray-400'}`}>편집할 영상 파일을 드래그 앤 드롭하거나 선택하세요 (MP4, WebM)</p>
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isProcessing}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center gap-2 mt-2"
+            originalSubtitles.length > 0 ? (
+              <div 
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`w-full h-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-6 text-center transition-all duration-200
+                  ${isDragging 
+                    ? 'border-blue-500 bg-blue-500/10 scale-[0.98]' 
+                    : 'border-blue-500/30 bg-blue-950/10'}`}
               >
-                {isProcessing ? <Loader2 size={18} className="animate-spin" /> : null}
-                {isProcessing ? '처리 중...' : '영상 업로드'}
-              </button>
-            </div>
+                <div className="bg-blue-500/15 p-4 rounded-full mb-4">
+                  <Languages size={48} className="text-blue-400" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">자막 파일 전용 편집 모드</h3>
+                <p className="text-sm text-gray-400 max-w-md mb-4">
+                  영상 없이 자막 파일만 업로드되었습니다. 아래 목록에서 원본 자막을 편집하고 다국어 번역을 진행할 수 있습니다.
+                </p>
+                <div className="bg-gray-800/50 px-4 py-2 rounded-lg text-xs font-mono text-gray-300 mb-6 flex items-center gap-4">
+                  <span>파일명: <strong className="text-blue-350">{projectTitle || '무제'}</strong></span>
+                  <span className="w-px h-3 bg-gray-600"></span>
+                  <span>구간 개수: <strong className="text-blue-350">{originalSubtitles.length}개</strong></span>
+                </div>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isProcessing}
+                    className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center gap-2 border border-gray-700 text-sm shadow-sm"
+                  >
+                    <Upload size={16} /> 다른 파일 업로드
+                  </button>
+                  <button 
+                    onClick={handleTranslate}
+                    disabled={isTranslating}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors disabled:opacity-50 flex items-center gap-2 text-sm shadow-md"
+                  >
+                    {isTranslating ? <Loader2 size={16} className="animate-spin" /> : <Languages size={16} />}
+                    {isTranslating ? 'AI 번역 중...' : '다국어 AI 번역 시작'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`w-full h-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all duration-200
+                  ${isDragging 
+                    ? 'border-blue-500 bg-blue-500/10 scale-[0.98]' 
+                    : 'border-gray-600 bg-gray-800/30'}`}
+              >
+                <Upload size={48} className={`mb-4 transition-colors ${isDragging ? 'text-blue-400' : 'text-gray-500'}`} />
+                <p className={`font-medium mb-2 transition-colors ${isDragging ? 'text-blue-300' : 'text-gray-400'}`}>편집할 영상 또는 SMI/SRT 자막 파일을 드래그 앤 드롭하거나 선택하세요</p>
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isProcessing}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center gap-2 mt-2"
+                >
+                  {isProcessing ? <Loader2 size={18} className="animate-spin" /> : null}
+                  {isProcessing ? '처리 중...' : '파일 업로드'}
+                </button>
+              </div>
+            )
           ) : (
             <div className="relative w-full h-full flex flex-col bg-black rounded-lg overflow-hidden shadow-inner group">
               {/* 영상 영역 */}
