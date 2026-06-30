@@ -37,6 +37,7 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState({ name: "", role: "" });
   const [editLoading, setEditLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [migrating, setMigrating] = useState(false);
 
   // Guard routing: ADMIN only
   useEffect(() => {
@@ -164,6 +165,50 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleMigrateLegacyData = async () => {
+    if (!confirm("소유자(userId)가 없는 과거의 모든 작업 내역과 시험지 데이터를 홍일석(ilseok_hong@difinition.co.kr) 계정 소유로 마이그레이션 하시겠습니까?\n\n이 작업은 데이터 양에 따라 약 10~30초 정도 소요될 수 있습니다.")) {
+      return;
+    }
+    
+    setMigrating(true);
+    try {
+      const TARGET_UID = '6RgW1uS7KZglGmJeKHOj1uia5ej1'; // ilseok_hong@difinition.co.kr
+      
+      // 1. subedit_history
+      const historySnap = await getDocs(collection(db, "subedit_history"));
+      let historyCount = 0;
+      for (const docSnap of historySnap.docs) {
+        const data = docSnap.data();
+        if (!data.userId) {
+          await updateDoc(doc(db, "subedit_history", docSnap.id), {
+            userId: TARGET_UID
+          });
+          historyCount++;
+        }
+      }
+      
+      // 2. unicon_exams
+      const examsSnap = await getDocs(collection(db, "unicon_exams"));
+      let examsCount = 0;
+      for (const docSnap of examsSnap.docs) {
+        const data = docSnap.data();
+        if (!data.userId) {
+          await updateDoc(doc(db, "unicon_exams", docSnap.id), {
+            userId: TARGET_UID
+          });
+          examsCount++;
+        }
+      }
+      
+      alert(`마이그레이션이 완료되었습니다!\n\n- 작업 내역: ${historyCount}건 변경 완료\n- 시험지 내역: ${examsCount}건 변경 완료`);
+    } catch (err: any) {
+      console.error("Migration error:", err);
+      alert("마이그레이션 중 오류가 발생했습니다: " + err.message);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   // Create new user using the Secondary App trick
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,12 +324,28 @@ export default function AdminUsersPage() {
               <p className="mt-1 text-sm text-gray-500">UNICON Creator 플랫폼 회원의 계정 권한을 추가 및 설정합니다.</p>
             </div>
             
-            <button 
-              onClick={() => setIsOpen(true)}
-              className="flex items-center gap-2 bg-[#025096] text-white px-4 py-2.5 rounded-lg font-bold hover:bg-[#023b70] transition-colors shadow-sm cursor-pointer"
-            >
-              <UserPlus size={18} /> 새 계정 발급
-            </button>
+            <div className="flex gap-2">
+              <button 
+                disabled={migrating}
+                onClick={handleMigrateLegacyData}
+                className="flex items-center gap-2 bg-gray-500 text-white px-4 py-2.5 rounded-lg font-bold hover:bg-gray-600 disabled:bg-gray-400 transition-colors shadow-sm cursor-pointer text-sm"
+              >
+                {migrating ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    마이그레이션 중...
+                  </>
+                ) : (
+                  "과거 데이터 마이그레이션"
+                )}
+              </button>
+              <button 
+                onClick={() => setIsOpen(true)}
+                className="flex items-center gap-2 bg-[#025096] text-white px-4 py-2.5 rounded-lg font-bold hover:bg-[#023b70] transition-colors shadow-sm cursor-pointer"
+              >
+                <UserPlus size={18} /> 새 계정 발급
+              </button>
+            </div>
           </div>
 
           {/* Search bar & Filter summary */}
