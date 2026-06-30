@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors, Combine, X, Volume2, VolumeX, BookOpen, List } from 'lucide-react';
+import { Upload, Languages, Download, Play, Pause, Settings, Mic, Loader2, Scissors, Combine, X, Volume2, VolumeX, BookOpen, List, Check } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, getDocs, query, orderBy, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -238,6 +238,10 @@ export default function Home() {
   const [initialOriginalSubtitles, setInitialOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [initialTranslatedSubtitles, setInitialTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [detectedOriginalSubtitles, setDetectedOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [detectedTranslatedSubtitles, setDetectedTranslatedSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
   const [detectedTranslationsCache, setDetectedTranslationsCache] = useState<Record<string, {id: number, start: string, end: string, text: string}[]>>({});
   const [isDragging, setIsDragging] = useState(false);
@@ -1200,6 +1204,42 @@ export default function Home() {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      alert("새 비밀번호와 비밀번호 확인이 일치하지 않습니다.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      alert("비밀번호는 최소 6자 이상이어야 합니다.");
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      const { updatePassword } = await import("firebase/auth");
+      if (auth.currentUser) {
+        await updatePassword(auth.currentUser, newPassword);
+        alert("비밀번호가 성공적으로 변경되었습니다.");
+        setIsSettingsOpen(false);
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        alert("인증 오류가 발생했습니다. 다시 로그인해 주세요.");
+      }
+    } catch (err: any) {
+      console.error("Password update error:", err);
+      if (err.code === "auth/requires-recent-login") {
+        alert("보안을 위해 다시 로그인한 뒤 비밀번호를 변경해 주세요.");
+        await logout();
+        router.push("/login");
+      } else {
+        alert("비밀번호 변경 실패: " + err.message);
+      }
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   // 비디오 시간 업데이트 감지 및 자막 싱크 맞춤
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
@@ -1942,7 +1982,11 @@ export default function Home() {
             {isProcessing ? progressMsg : '파일 업로드'}
           </button>
           
-          <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
+            title="계정 및 비밀번호 변경 설정"
+          >
             <Settings size={20} />
           </button>
         </div>
@@ -3011,6 +3055,82 @@ export default function Home() {
                 닫기
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings / Password Change Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden relative border border-gray-150">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-lg text-gray-800 flex items-center gap-1.5">
+                <Settings className="text-gray-650" size={20} />
+                계정 설정 및 비밀번호 변경
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsSettingsOpen(false);
+                  setNewPassword("");
+                  setConfirmPassword("");
+                }} 
+                className="text-gray-400 hover:text-gray-900 p-1 rounded-full hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleChangePassword} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">계정 이메일</label>
+                <input 
+                  type="text" 
+                  value={user?.email || ""} 
+                  disabled
+                  className="w-full bg-gray-150 border border-gray-200 rounded-lg p-2.5 text-sm text-gray-500 cursor-not-allowed" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">새 비밀번호</label>
+                <input 
+                  type="password" 
+                  value={newPassword} 
+                  onChange={e => setNewPassword(e.target.value)} 
+                  className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-all" 
+                  placeholder="새 비밀번호 입력 (6자 이상)" 
+                  required 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">비밀번호 확인</label>
+                <input 
+                  type="password" 
+                  value={confirmPassword} 
+                  onChange={e => setConfirmPassword(e.target.value)} 
+                  className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-all" 
+                  placeholder="비밀번호 다시 입력" 
+                  required 
+                />
+              </div>
+              
+              <button 
+                disabled={passwordLoading} 
+                type="submit" 
+                className="w-full mt-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer"
+              >
+                {passwordLoading ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    변경 처리 중...
+                  </>
+                ) : (
+                  <>
+                    <Check size={18} />
+                    비밀번호 변경 완료
+                  </>
+                )}
+              </button>
+            </form>
           </div>
         </div>
       )}
