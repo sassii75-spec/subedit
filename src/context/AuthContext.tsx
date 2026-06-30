@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUserRole("USER");
           }
         } catch (error) {
-          console.error("Error fetching user role:", error);
+          console.warn("Error fetching user role (defaulting to USER):", error);
           setUserRole("USER");
         }
       } else {
