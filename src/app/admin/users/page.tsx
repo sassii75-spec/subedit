@@ -31,6 +31,13 @@ export default function AdminUsersPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "USER" });
 
+  // Edit User modal states
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", role: "" });
+  const [editLoading, setEditLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
   // Guard routing: ADMIN only
   useEffect(() => {
     if (!loading) {
@@ -104,6 +111,56 @@ export default function AdminUsersPage() {
     } catch (err: any) {
       console.error("Error deleting user:", err);
       alert("삭제 실패: " + err.message);
+    }
+  };
+
+  const handleOpenEditModal = (u: UserProfile) => {
+    setEditingUser(u);
+    setEditForm({ name: u.name, role: u.role });
+    setIsEditOpen(true);
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    
+    setEditLoading(true);
+    try {
+      const userRef = doc(db, "subedit_users", editingUser.uid);
+      await updateDoc(userRef, {
+        name: editForm.name,
+        role: editForm.role
+      });
+      
+      alert("회원 정보가 성공적으로 수정되었습니다.");
+      setIsEditOpen(false);
+      fetchUsers(); // Refresh list
+    } catch (err: any) {
+      console.error("Error updating user details:", err);
+      alert("회원 정보 수정 실패: " + err.message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!editingUser) return;
+    
+    if (!confirm(`${editingUser.email} 사용자의 비밀번호 초기화 메일을 발송하시겠습니까?`)) {
+      return;
+    }
+    
+    setResetLoading(true);
+    try {
+      const { sendPasswordResetEmail } = await import("firebase/auth");
+      const { auth } = await import("@/lib/firebase");
+      await sendPasswordResetEmail(auth, editingUser.email);
+      alert("비밀번호 초기화 메일이 성공적으로 전송되었습니다.");
+    } catch (err: any) {
+      console.error("Error sending reset email:", err);
+      alert("비밀번호 초기화 메일 전송 실패: " + err.message);
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -285,7 +342,7 @@ export default function AdminUsersPage() {
                         <td className="p-4 text-gray-500 font-mono text-xs">{u.email}</td>
                         <td className="p-4">
                           <div className="flex items-center gap-2">
-                            <Shield className={`size-4 ${u.role === 'ADMIN' ? 'text-red-500' : 'text-green-500'}`} />
+                            <Shield className={`size-4 ${u.role === 'ADMIN' ? 'text-red-500' : u.role === 'BANNED' ? 'text-gray-500' : 'text-green-500'}`} />
                             <select
                               value={u.role}
                               disabled={u.uid === user?.uid}
@@ -293,10 +350,13 @@ export default function AdminUsersPage() {
                               className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border outline-none cursor-pointer bg-white transition-all focus:ring-1 focus:ring-blue-500
                                 ${u.role === 'ADMIN' 
                                   ? 'border-red-200 text-red-700 hover:bg-red-50/20' 
+                                  : u.role === 'BANNED'
+                                  ? 'border-gray-300 text-gray-700 bg-gray-100 hover:bg-gray-200'
                                   : 'border-green-200 text-green-700 hover:bg-green-50/20'}`}
                             >
                               <option value="USER">일반 사용자 (USER)</option>
                               <option value="ADMIN">시스템 관리자 (ADMIN)</option>
+                              <option value="BANNED">사용 정지 (BANNED)</option>
                             </select>
                           </div>
                         </td>
@@ -304,6 +364,13 @@ export default function AdminUsersPage() {
                           {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-"}
                         </td>
                         <td className="p-4 text-center">
+                          <button
+                            onClick={() => handleOpenEditModal(u)}
+                            className="p-1.5 text-gray-400 hover:text-blue-650 hover:bg-blue-55 rounded-lg transition-all cursor-pointer mr-1"
+                            title="회원 정보 수정 및 초기화"
+                          >
+                            <Edit2 size={16} />
+                          </button>
                           <button
                             onClick={() => handleDeleteUser(u.uid, u.email)}
                             disabled={u.uid === user?.uid}
@@ -403,6 +470,105 @@ export default function AdminUsersPage() {
                   </>
                 )}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {isEditOpen && editingUser && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden relative border border-gray-150">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-lg text-gray-800 flex items-center gap-1.5">
+                <Edit2 className="text-blue-600" size={20} />
+                회원 상세 정보 수정
+              </h3>
+              <button 
+                onClick={() => setIsEditOpen(false)} 
+                className="text-gray-400 hover:text-gray-900 p-1 rounded-full hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdateUser} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">이메일 계정 (수정 불가)</label>
+                <input 
+                  type="text" 
+                  value={editingUser.email} 
+                  disabled
+                  className="w-full bg-gray-100 border border-gray-200 rounded-lg p-2.5 text-sm text-gray-500 cursor-not-allowed font-mono" 
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">사용자 이름</label>
+                <input 
+                  type="text" 
+                  value={editForm.name} 
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })} 
+                  className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm transition-all" 
+                  placeholder="사용자 이름 입력" 
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">권한 수준 (Role)</label>
+                <select 
+                  value={editForm.role} 
+                  disabled={editingUser.uid === user?.uid}
+                  onChange={e => setEditForm({ ...editForm, role: e.target.value })} 
+                  className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm cursor-pointer bg-white transition-all"
+                >
+                  <option value="USER">일반 사용자 (USER)</option>
+                  <option value="ADMIN">시스템 관리자 (ADMIN)</option>
+                  <option value="BANNED">사용 정지 (BANNED)</option>
+                </select>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">비밀번호 관리</label>
+                <button
+                  type="button"
+                  disabled={resetLoading}
+                  onClick={handleSendResetEmail}
+                  className="w-full bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 text-gray-700 border border-gray-300 py-2.5 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  {resetLoading ? (
+                    <Loader2 className="animate-spin" size={14} />
+                  ) : (
+                    <ShieldAlert size={14} className="text-amber-500" />
+                  )}
+                  비밀번호 재설정(초기화) 메일 전송
+                </button>
+                <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
+                  사용자 이메일로 비밀번호 재설정 링크가 포함된 메일을 발송합니다. 사용자가 메일의 링크를 통해 직접 안전하게 새 비밀번호를 설정할 수 있습니다.
+                </p>
+              </div>
+              
+              <div className="flex gap-2 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsEditOpen(false)}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 rounded-lg transition-colors text-sm cursor-pointer"
+                >
+                  취소
+                </button>
+                <button 
+                  disabled={editLoading} 
+                  type="submit" 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md cursor-pointer text-sm"
+                >
+                  {editLoading ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    "저장 완료"
+                  )}
+                </button>
+              </div>
             </form>
           </div>
         </div>

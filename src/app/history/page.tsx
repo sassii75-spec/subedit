@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List, Eye, Clipboard, Check, Play } from 'lucide-react';
+import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List, Eye, Clipboard, Check, Play, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -101,6 +101,25 @@ export default function HistoryPage() {
       <div className="min-h-screen bg-[#0f111a] flex flex-col items-center justify-center text-white">
         <Loader2 className="animate-spin text-blue-500 mb-4" size={40} />
         <p className="text-gray-400 font-medium">세션 확인 중...</p>
+      </div>
+    );
+  }
+
+  if (userRole === 'BANNED') {
+    return (
+      <div className="min-h-screen bg-[#0f111a] flex flex-col items-center justify-center text-white p-6 text-center">
+        <ShieldAlert className="text-red-500 mb-4 animate-bounce" size={48} />
+        <h2 className="text-2xl font-bold text-red-500 mb-2">접근 제한됨</h2>
+        <p className="text-gray-400 max-w-md mb-6 text-sm">관리자에 의해 이 계정의 이용이 제한되었습니다. 관리자에게 문의해 주세요.</p>
+        <button
+          onClick={async () => {
+            await logout();
+            router.push('/login');
+          }}
+          className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-bold transition-colors cursor-pointer"
+        >
+          로그아웃 후 다시 로그인
+        </button>
       </div>
     );
   }
