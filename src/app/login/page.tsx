@@ -36,11 +36,11 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error("Login error:", err);
       if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
-        setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+        setError("이메일 또는 비밀번호가 올바르지 않습니다. (에러 코드: " + err.code + ")");
       } else if (err.code === "auth/invalid-email") {
-        setError("올바른 이메일 형식이 아닙니다.");
+        setError("올바른 이메일 형식이 아닙니다. (에러 코드: " + err.code + ")");
       } else {
-        setError("로그인 중 오류가 발생했습니다. 다시 시도해 주세요.");
+        setError("로그인 중 오류가 발생했습니다: " + (err.message || err.toString()) + " (에러 코드: " + err.code + ")");
       }
       setSigningIn(false);
     }
@@ -55,7 +55,7 @@ export default function LoginPage() {
       // AuthContext state update will trigger redirect
     } catch (err: any) {
       console.error("Google login error:", err);
-      setError("구글 로그인에 실패했습니다.");
+      setError("구글 로그인에 실패했습니다: " + (err.message || err.toString()) + " (에러 코드: " + err.code + ")");
       setSigningIn(false);
     }
   };
