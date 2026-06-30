@@ -5,6 +5,9 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List, Eye, Clipboard, Check, Play } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
+import { Loader2 } from 'lucide-react';
 
 interface SubtitleProject {
   id: string;
@@ -25,6 +28,15 @@ interface ExamProject {
 }
 
 export default function HistoryPage() {
+  const { user, userRole, loading, logout } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
   const [activeTab, setActiveTab] = useState<'translations' | 'exams'>('translations');
   const [projects, setProjects] = useState<SubtitleProject[]>([]);
   const [exams, setExams] = useState<ExamProject[]>([]);
@@ -83,6 +95,15 @@ export default function HistoryPage() {
   useEffect(() => {
     fetchHistory();
   }, []);
+
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen bg-[#0f111a] flex flex-col items-center justify-center text-white">
+        <Loader2 className="animate-spin text-blue-500 mb-4" size={40} />
+        <p className="text-gray-400 font-medium">세션 확인 중...</p>
+      </div>
+    );
+  }
 
   const handleDelete = async (id: string, isExam: boolean = false) => {
     if (confirm('이 내역을 삭제하시겠습니까?')) {
@@ -292,6 +313,28 @@ export default function HistoryPage() {
             className={`px-4 py-1.5 text-sm font-bold rounded-md transition-colors ${activeTab === 'exams' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             시험지 보관함
+          </button>
+        </div>
+
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1 rounded font-medium">
+            {user?.email} ({userRole === "ADMIN" ? "관리자" : "일반 유저"})
+          </span>
+          {userRole === 'ADMIN' && (
+            <Link href="/admin/users" className="text-xs font-bold text-red-655 hover:underline">
+              어드민 포털
+            </Link>
+          )}
+          <button
+            onClick={async () => {
+              if (confirm('로그아웃 하시겠습니까?')) {
+                await logout();
+                router.push('/login');
+              }
+            }}
+            className="text-xs text-gray-500 hover:text-red-500 font-semibold transition-colors cursor-pointer"
+          >
+            로그아웃
           </button>
         </div>
       </header>

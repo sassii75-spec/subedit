@@ -7,6 +7,8 @@ import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, getDocs, query, orderBy, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 
 export type QuizItem = {
   id: string;
@@ -166,6 +168,16 @@ const parseSrt = (text: string): { id: number, start: string, end: string, text:
 
 
 export default function Home() {
+  const { user, userRole, loading, logout } = useAuth();
+  const router = useRouter();
+
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [originalSubtitles, setOriginalSubtitles] = useState<{id: number, start: string, end: string, text: string}[]>([]);
 
@@ -231,6 +243,15 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [projectVersions, setProjectVersions] = useState<any[]>([]);
   const [isVersionsOpen, setIsVersionsOpen] = useState(false);
+
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen bg-[#0f111a] flex flex-col items-center justify-center text-white">
+        <Loader2 className="animate-spin text-blue-500 mb-4" size={40} />
+        <p className="text-gray-400 font-medium">세션 확인 중...</p>
+      </div>
+    );
+  }
 
   // Reactive effect to dynamically build baseline for original subtitles chunk-by-chunk
   useEffect(() => {
@@ -1809,6 +1830,29 @@ export default function Home() {
         </div>
         
         <div className="flex items-center gap-3">
+          {/* User Profile & Auth controls */}
+          <div className="flex items-center gap-3 pr-3 border-r border-gray-200 mr-2">
+            <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1 rounded font-medium">
+              {user?.email} ({userRole === "ADMIN" ? "관리자" : "일반 유저"})
+            </span>
+            {userRole === 'ADMIN' && (
+              <Link href="/admin/users" className="text-xs font-bold text-red-650 hover:underline">
+                어드민 포털
+              </Link>
+            )}
+            <button
+              onClick={async () => {
+                if (confirm('로그아웃 하시겠습니까?')) {
+                  await logout();
+                  router.push('/login');
+                }
+              }}
+              className="text-xs text-gray-500 hover:text-red-500 font-semibold transition-colors cursor-pointer"
+            >
+              로그아웃
+            </button>
+          </div>
+
           <Link href="/history" className="text-sm font-semibold text-gray-600 hover:text-blue-600 mr-2 transition-colors">
             히스토리 보기
           </Link>
