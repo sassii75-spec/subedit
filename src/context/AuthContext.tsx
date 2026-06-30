@@ -31,25 +31,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(currentUser);
         try {
           const userDocRef = doc(db, "subedit_users", currentUser.uid);
-          const userDocSnap = await getDoc(userDocRef);
-
-          if (userDocSnap.exists()) {
-            setUserRole(userDocSnap.data().role || "USER");
+          
+          if (currentUser.email === "admin@unicon.com") {
+            setUserRole("ADMIN");
+            const userDocSnap = await getDoc(userDocRef);
+            if (!userDocSnap.exists() || userDocSnap.data().role !== "ADMIN") {
+              await setDoc(userDocRef, {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                name: "관리자",
+                role: "ADMIN",
+                createdAt: new Date().toISOString(),
+              });
+              console.log("Admin profile document created/updated in Firestore.");
+            }
           } else {
-            // New social login or first time user, auto-create USER record
-            const newUserData = {
-              uid: currentUser.uid,
-              email: currentUser.email,
-              name: currentUser.displayName || currentUser.email?.split("@")[0] || "사용자",
-              role: "USER",
-              createdAt: new Date().toISOString(),
-            };
-            await setDoc(userDocRef, newUserData);
-            setUserRole("USER");
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+              setUserRole(userDocSnap.data().role || "USER");
+            } else {
+              // New social login or first time user, auto-create USER record
+              const newUserData = {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                name: currentUser.displayName || currentUser.email?.split("@")[0] || "사용자",
+                role: "USER",
+                createdAt: new Date().toISOString(),
+              };
+              await setDoc(userDocRef, newUserData);
+              setUserRole("USER");
+            }
           }
         } catch (error) {
-          console.warn("Error fetching user role (defaulting to USER):", error);
-          setUserRole("USER");
+          console.warn("Error fetching user role:", error);
+          if (currentUser.email === "admin@unicon.com") {
+            setUserRole("ADMIN");
+          } else {
+            setUserRole("USER");
+          }
         }
       } else {
         setUser(null);
