@@ -855,6 +855,7 @@ export default function Home() {
     if (quizzes.length === 0) return;
     try {
       await addDoc(collection(db, 'unicon_exams'), {
+        userId: user?.uid || '',
         title: examTitle || '제목 없음',
         subtitle: examSubtitle || '',
         quizzes: quizzes,
@@ -1134,6 +1135,7 @@ export default function Home() {
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
+          userId: user?.uid || '',
           title,
           targetLang,
           originalSubtitles,
@@ -1162,6 +1164,7 @@ export default function Home() {
         const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
+          userId: user?.uid || '',
           title,
           targetLang,
           originalSubtitles,

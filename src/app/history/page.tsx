@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
 import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List, Eye, Clipboard, Check, Play, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -70,20 +70,45 @@ export default function HistoryPage() {
 
   const fetchHistory = async () => {
     try {
-      const q = query(collection(db, 'subedit_history'), orderBy('createdAt', 'desc'));
+      let q;
+      let qExams;
+
+      if (userRole === 'ADMIN') {
+        q = query(collection(db, 'subedit_history'), orderBy('createdAt', 'desc'));
+        qExams = query(collection(db, 'unicon_exams'), orderBy('createdAt', 'desc'));
+      } else {
+        // Query by userId (no orderBy in query to avoid Firestore index requirement error)
+        q = query(collection(db, 'subedit_history'), where('userId', '==', user?.uid || ''));
+        qExams = query(collection(db, 'unicon_exams'), where('userId', '==', user?.uid || ''));
+      }
+
       const querySnapshot = await getDocs(q);
       const data: SubtitleProject[] = [];
       querySnapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as SubtitleProject);
       });
-      setProjects(data);
 
-      const qExams = query(collection(db, 'unicon_exams'), orderBy('createdAt', 'desc'));
       const examSnap = await getDocs(qExams);
       const examData: ExamProject[] = [];
       examSnap.forEach((doc) => {
         examData.push({ id: doc.id, ...doc.data() } as ExamProject);
       });
+
+      // Safe date parser helper for client-side sorting
+      const getMs = (val: any) => {
+        if (!val) return 0;
+        if (typeof val.toDate === 'function') return val.toDate().getTime();
+        if (val.seconds) return val.seconds * 1000;
+        if (typeof val === 'string') return new Date(val).getTime();
+        if (typeof val === 'number') return val;
+        return 0;
+      };
+
+      // Sort client-side in descending order of createdAt
+      data.sort((a, b) => getMs(b.createdAt) - getMs(a.createdAt));
+      examData.sort((a, b) => getMs(b.createdAt) - getMs(a.createdAt));
+
+      setProjects(data);
       setExams(examData);
     } catch (err) {
       console.error('Error fetching history:', err);
