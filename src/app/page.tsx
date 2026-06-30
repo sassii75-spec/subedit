@@ -248,33 +248,7 @@ export default function Home() {
   const [projectVersions, setProjectVersions] = useState<any[]>([]);
   const [isVersionsOpen, setIsVersionsOpen] = useState(false);
 
-  if (loading || !user) {
-    return (
-      <div className="min-h-screen bg-[#0f111a] flex flex-col items-center justify-center text-white">
-        <Loader2 className="animate-spin text-blue-500 mb-4" size={40} />
-        <p className="text-gray-400 font-medium">세션 확인 중...</p>
-      </div>
-    );
-  }
-
-  if (userRole === 'BANNED') {
-    return (
-      <div className="min-h-screen bg-[#0f111a] flex flex-col items-center justify-center text-white p-6 text-center">
-        <ShieldAlert className="text-red-500 mb-4 animate-bounce" size={48} />
-        <h2 className="text-2xl font-bold text-red-500 mb-2">접근 제한됨</h2>
-        <p className="text-gray-400 max-w-md mb-6 text-sm">관리자에 의해 이 계정의 이용이 제한되었습니다. 관리자에게 문의해 주세요.</p>
-        <button
-          onClick={async () => {
-            await logout();
-            router.push('/login');
-          }}
-          className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-bold transition-colors cursor-pointer"
-        >
-          로그아웃 후 다시 로그인
-        </button>
-      </div>
-    );
-  }
+  // Authorization checks are placed at the bottom of the component to respect React's Rules of Hooks
 
   // Reactive effect to dynamically build baseline for original subtitles chunk-by-chunk
   useEffect(() => {
@@ -1863,6 +1837,34 @@ export default function Home() {
       }, 1000);
     }, 500);
   };
+
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen bg-[#0f111a] flex flex-col items-center justify-center text-white">
+        <Loader2 className="animate-spin text-blue-500 mb-4" size={40} />
+        <p className="text-gray-400 font-medium">세션 확인 중...</p>
+      </div>
+    );
+  }
+
+  if (userRole === 'BANNED') {
+    return (
+      <div className="min-h-screen bg-[#0f111a] flex flex-col items-center justify-center text-white p-6 text-center">
+        <ShieldAlert className="text-red-500 mb-4 animate-bounce" size={48} />
+        <h2 className="text-2xl font-bold text-red-500 mb-2">접근 제한됨</h2>
+        <p className="text-gray-400 max-w-md mb-6 text-sm">관리자에 의해 이 계정의 이용이 제한되었습니다. 관리자에게 문의해 주세요.</p>
+        <button
+          onClick={async () => {
+            await logout();
+            router.push('/login');
+          }}
+          className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-bold transition-colors cursor-pointer"
+        >
+          로그아웃 후 다시 로그인
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 text-gray-900 font-sans">
