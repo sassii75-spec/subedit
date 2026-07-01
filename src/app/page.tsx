@@ -966,8 +966,14 @@ export default function Home() {
         const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
         console.log("New version created:", newVer);
         
-        const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
-        await setDoc(verDocRef, newVer);
+        let subColSuccess = true;
+        try {
+          const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
+          await setDoc(verDocRef, newVer);
+        } catch (subColErr) {
+          console.warn("Subcollection write failed, falling back to inline versions array:", subColErr);
+          subColSuccess = false;
+        }
 
         console.log("docRef initializing...");
         const docRef = doc(db, 'subedit_history', projectId);
@@ -979,7 +985,7 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
-          versions: [], // clear main document versions field to avoid 1MB limit
+          versions: subColSuccess ? [] : [...projectVersions, newVer],
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
@@ -1022,10 +1028,22 @@ export default function Home() {
         
         const newProjId = docRef.id;
 
-        const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
-        await setDoc(ver0Ref, ver0);
-        const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
-        await setDoc(ver1Ref, ver1);
+        let subColSuccess = true;
+        try {
+          const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
+          await setDoc(ver0Ref, ver0);
+          const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
+          await setDoc(ver1Ref, ver1);
+        } catch (subColErr) {
+          console.warn("Subcollection write failed, falling back to inline versions array:", subColErr);
+          subColSuccess = false;
+        }
+
+        if (!subColSuccess) {
+          await updateDoc(doc(db, 'subedit_history', newProjId), {
+            versions: [ver0, ver1]
+          });
+        }
 
         const updatedVersions = [ver0, ver1];
         setProjectId(newProjId);
@@ -1065,8 +1083,14 @@ export default function Home() {
       if (projectId) {
         const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
         
-        const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
-        await setDoc(verDocRef, newVer);
+        let subColSuccess = true;
+        try {
+          const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
+          await setDoc(verDocRef, newVer);
+        } catch (subColErr) {
+          console.warn("Subcollection write failed, falling back to inline versions array:", subColErr);
+          subColSuccess = false;
+        }
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
@@ -1076,7 +1100,7 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
-          versions: [], // clear main document versions field to avoid 1MB limit
+          versions: subColSuccess ? [] : [...projectVersions, newVer],
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
@@ -1118,10 +1142,22 @@ export default function Home() {
         
         const newProjId = docRef.id;
 
-        const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
-        await setDoc(ver0Ref, ver0);
-        const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
-        await setDoc(ver1Ref, ver1);
+        let subColSuccess = true;
+        try {
+          const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
+          await setDoc(ver0Ref, ver0);
+          const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
+          await setDoc(ver1Ref, ver1);
+        } catch (subColErr) {
+          console.warn("Subcollection write failed, falling back to inline versions array:", subColErr);
+          subColSuccess = false;
+        }
+
+        if (!subColSuccess) {
+          await updateDoc(doc(db, 'subedit_history', newProjId), {
+            versions: [ver0, ver1]
+          });
+        }
 
         const updatedVersions = [ver0, ver1];
         setProjectId(newProjId);
@@ -1156,8 +1192,14 @@ export default function Home() {
       if (projectId) {
         const newVer = createNewVersion(versionNote, originalSubtitles, translationsCache);
         
-        const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
-        await setDoc(verDocRef, newVer);
+        let subColSuccess = true;
+        try {
+          const verDocRef = doc(collection(db, 'subedit_history', projectId, 'versions'), newVer.versionId);
+          await setDoc(verDocRef, newVer);
+        } catch (subColErr) {
+          console.warn("Subcollection write failed, falling back to inline versions array:", subColErr);
+          subColSuccess = false;
+        }
 
         const docRef = doc(db, 'subedit_history', projectId);
         await updateDoc(docRef, {
@@ -1169,7 +1211,7 @@ export default function Home() {
           translations: translationsCache,
           detectedTranslations: detectedTranslationsCache,
           lastSavedAt: serverTimestamp(),
-          versions: [], // clear main document versions field to avoid 1MB limit
+          versions: subColSuccess ? [] : [...projectVersions, newVer],
           detectedOriginalSubtitles,
           detectedTranslatedSubtitles
         });
@@ -1206,10 +1248,22 @@ export default function Home() {
         
         const newProjId = docRef.id;
 
-        const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
-        await setDoc(ver0Ref, ver0);
-        const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
-        await setDoc(ver1Ref, ver1);
+        let subColSuccess = true;
+        try {
+          const ver0Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver0.versionId);
+          await setDoc(ver0Ref, ver0);
+          const ver1Ref = doc(collection(db, 'subedit_history', newProjId, 'versions'), ver1.versionId);
+          await setDoc(ver1Ref, ver1);
+        } catch (subColErr) {
+          console.warn("Subcollection write failed, falling back to inline versions array:", subColErr);
+          subColSuccess = false;
+        }
+
+        if (!subColSuccess) {
+          await updateDoc(doc(db, 'subedit_history', newProjId), {
+            versions: [ver0, ver1]
+          });
+        }
 
         const updatedVersions = [ver0, ver1];
         setProjectId(newProjId);
