@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, query, orderBy, where, limit } from 'firebase/firestore';
 import { ArrowLeft, Download, Trash2, Languages, Calendar, X, List, Eye, Clipboard, Check, Play, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -41,6 +41,8 @@ export default function HistoryPage() {
   const [projects, setProjects] = useState<SubtitleProject[]>([]);
   const [exams, setExams] = useState<ExamProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [limitCount, setLimitCount] = useState<number>(9);
+  const [indexErrorUrl, setIndexErrorUrl] = useState<string | null>(null);
   const [previewProject, setPreviewProject] = useState<SubtitleProject | null>(null);
   const [viewFileModal, setViewFileModal] = useState<{ project: SubtitleProject, isOriginal: boolean, format: 'SRT' | 'SMI', content: string, langCode?: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
@@ -74,27 +76,65 @@ export default function HistoryPage() {
       let qExams;
 
       if (userRole === 'ADMIN') {
-        q = query(collection(db, 'subedit_history'), orderBy('createdAt', 'desc'));
-        qExams = query(collection(db, 'unicon_exams'), orderBy('createdAt', 'desc'));
+        q = query(collection(db, 'subedit_history'), orderBy('createdAt', 'desc'), limit(limitCount));
+        qExams = query(collection(db, 'unicon_exams'), orderBy('createdAt', 'desc'), limit(limitCount));
       } else {
-        // Query by userId (no orderBy in query to avoid Firestore index requirement error)
-        q = query(collection(db, 'subedit_history'), where('userId', '==', user?.uid || ''));
-        qExams = query(collection(db, 'unicon_exams'), where('userId', '==', user?.uid || ''));
+        // Query by userId with orderBy and limit for high-speed server-side performance
+        q = query(
+          collection(db, 'subedit_history'), 
+          where('userId', '==', user?.uid || ''),
+          orderBy('createdAt', 'desc'),
+          limit(limitCount)
+        );
+        qExams = query(
+          collection(db, 'unicon_exams'), 
+          where('userId', '==', user?.uid || ''),
+          orderBy('createdAt', 'desc'),
+          limit(limitCount)
+        );
       }
 
-      const querySnapshot = await getDocs(q);
+      // Try executing the high-performance paginated queries
+      let querySnapshot;
+      try {
+        querySnapshot = await getDocs(q);
+      } catch (err: any) {
+        // If it fails because of missing index, capture index creation link and use fallback
+        if (err.message && err.message.includes('index')) {
+          console.warn("Index not found, using client-side fallback query. Error:", err.message);
+          const match = err.message.match(/https:\/\/console\.firebase\.google\.com[^\s]*/);
+          if (match) {
+            setIndexErrorUrl(match[0]);
+          } else {
+            setIndexErrorUrl("https://console.firebase.google.com/");
+          }
+        }
+        // Fallback: query without order, sort client-side (no index required)
+        q = query(collection(db, 'subedit_history'), where('userId', '==', user?.uid || ''), limit(limitCount));
+        querySnapshot = await getDocs(q);
+      }
+
       const data: SubtitleProject[] = [];
       querySnapshot.forEach((doc) => {
         data.push({ id: doc.id, ...doc.data() } as SubtitleProject);
       });
 
-      const examSnap = await getDocs(qExams);
+      // Try fetching exams
+      let examSnap;
+      try {
+        examSnap = await getDocs(qExams);
+      } catch (err: any) {
+        // Fallback for exams
+        qExams = query(collection(db, 'unicon_exams'), where('userId', '==', user?.uid || ''), limit(limitCount));
+        examSnap = await getDocs(qExams);
+      }
+
       const examData: ExamProject[] = [];
       examSnap.forEach((doc) => {
         examData.push({ id: doc.id, ...doc.data() } as ExamProject);
       });
 
-      // Safe date parser helper for client-side sorting
+      // Safe date parser helper for client-side sorting (essential for fallback queries)
       const getMs = (val: any) => {
         if (!val) return 0;
         if (typeof val.toDate === 'function') return val.toDate().getTime();
@@ -118,8 +158,10 @@ export default function HistoryPage() {
   };
 
   useEffect(() => {
-    fetchHistory();
-  }, []);
+    if (!loading && user) {
+      fetchHistory();
+    }
+  }, [user, userRole, loading, limitCount]);
 
   if (loading || !user) {
     return (
@@ -384,6 +426,29 @@ export default function HistoryPage() {
       </header>
 
       <main className="flex-1 p-8 max-w-7xl mx-auto w-full print:p-0 print:max-w-none">
+        {indexErrorUrl && (
+          <div className="mb-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg shadow-sm print:hidden">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="text-amber-600 mt-0.5 shrink-0" size={20} />
+              <div>
+                <h4 className="font-bold text-amber-800 text-sm">Firestore 인덱스 생성 대기 중</h4>
+                <p className="text-xs text-amber-700 mt-1 leading-relaxed font-medium">
+                  사용자별 작업 내역 조회 기능의 고속 조회를 위해 데이터베이스 인덱스를 설정해야 합니다.<br />
+                  아래 링크를 클릭하여 Firebase 콘솔에서 <strong>[인덱스 만들기]</strong> 버튼을 한 번 눌러주시면 즉시 정상 조회 및 속도 개선이 완료됩니다.
+                </p>
+                <a
+                  href={indexErrorUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-block bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3.5 py-1.5 rounded transition-colors shadow-sm"
+                >
+                  인덱스 자동 생성 링크 바로가기
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex justify-center items-center h-64 print:hidden">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -396,7 +461,8 @@ export default function HistoryPage() {
               <Link href="/" className="mt-4 text-blue-600 font-semibold hover:underline">새로운 자막 만들기</Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 print:hidden">
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 print:hidden">
               {projects.map((project) => (
                 <div key={project.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
                 <div className="p-5">
@@ -541,7 +607,18 @@ export default function HistoryPage() {
               </div>
             ))}
           </div>
-          )
+          {projects.length >= limitCount && (
+            <div className="flex justify-center mt-8 print:hidden">
+              <button
+                onClick={() => setLimitCount(prev => prev + 9)}
+                className="bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 font-bold px-8 py-3 rounded-lg shadow-sm transition-colors cursor-pointer text-sm"
+              >
+                작업 내역 더 보기
+              </button>
+            </div>
+          )}
+        </>
+      )
         ) : (
           /* 시험지 보관함 탭 */
           exams.length === 0 ? (
@@ -551,7 +628,8 @@ export default function HistoryPage() {
               <Link href="/" className="mt-4 text-purple-600 font-semibold hover:underline">영상 편집기에서 시험지 생성하기</Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 print:hidden">
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 print:hidden">
               {exams.map((exam) => (
                 <div key={exam.id} className="bg-white rounded-xl shadow-sm border border-purple-100 overflow-hidden hover:shadow-md transition-shadow">
                   <div className="p-5 flex flex-col h-full">
@@ -590,7 +668,18 @@ export default function HistoryPage() {
                 </div>
               ))}
             </div>
-          )
+            {exams.length >= limitCount && (
+              <div className="flex justify-center mt-8 print:hidden">
+                <button
+                  onClick={() => setLimitCount(prev => prev + 9)}
+                  className="bg-white hover:bg-purple-50 text-purple-750 border border-purple-200 font-bold px-8 py-3 rounded-lg shadow-sm transition-colors cursor-pointer text-sm"
+                >
+                  시험지 더 보기
+                </button>
+              </div>
+            )}
+        </>
+      )
         )}
       </main>
 
