@@ -626,9 +626,30 @@ export default function Home() {
         }
 
         if (result.segments && result.segments.length > 0) {
+          const words = result.words || [];
           const formattedSegments = result.segments.map((seg: any) => {
-            const absoluteStart = seg.start + startSec;
-            const absoluteEnd = seg.end + startSec;
+            let segStart = seg.start;
+            let segEnd = seg.end;
+            
+            // Filter words belonging to this segment with a small margin of error (0.1s)
+            const segWords = words.filter((w: any) => w.start >= seg.start - 0.1 && w.end <= seg.end + 0.1);
+            
+            if (segWords.length > 0) {
+              const firstWordStart = segWords[0].start;
+              const lastWordEnd = segWords[segWords.length - 1].end;
+              if (firstWordStart - segStart > 0.5 || segStart < 0.5) {
+                segStart = firstWordStart;
+              }
+              if (segEnd - lastWordEnd > 0.5) {
+                segEnd = lastWordEnd;
+              }
+              if (segStart > segEnd) {
+                segStart = seg.start;
+                segEnd = seg.end;
+              }
+            }
+            const absoluteStart = segStart + startSec;
+            const absoluteEnd = segEnd + startSec;
             return {
               id: globalSegmentId++,
               start: formatTime(absoluteStart),
@@ -900,6 +921,7 @@ export default function Home() {
 
   const createNewVersion = (note: string, orig: any[], transCache: Record<string, any[]>) => {
     return {
+      userId: user?.uid || '',
       versionId: Math.random().toString(36).substring(7),
       versionName: note || `버전 ${projectVersions.length + 1}`,
       originalSubtitles: JSON.parse(JSON.stringify(orig)),
@@ -975,6 +997,7 @@ export default function Home() {
         }
         
         const ver0 = {
+          userId: user?.uid || '',
           versionId: "ver_0",
           versionName: "버전 0 (최초 감지 원본)",
           originalSubtitles: JSON.parse(JSON.stringify(detectedOriginalSubtitles)),
@@ -984,6 +1007,7 @@ export default function Home() {
         const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
+          userId: user?.uid || '',
           title,
           targetLang,
           originalSubtitles,
@@ -1069,6 +1093,7 @@ export default function Home() {
         }
         
         const ver0 = {
+          userId: user?.uid || '',
           versionId: "ver_0",
           versionName: "버전 0 (최초 감지 원본)",
           originalSubtitles: JSON.parse(JSON.stringify(detectedOriginalSubtitles)),
@@ -1078,6 +1103,7 @@ export default function Home() {
         const ver1 = createNewVersion(versionNote || "최초 저장", originalSubtitles, translationsCache);
 
         const docRef = await addDoc(collection(db, 'subedit_history'), {
+          userId: user?.uid || '',
           title,
           targetLang,
           originalSubtitles,
@@ -1155,6 +1181,7 @@ export default function Home() {
         alert('성공적으로 저장 및 업데이트되었습니다!\n(새 버전 등록 완료)\n이제 우측 상단의 [히스토리 보기] 메뉴에서 자막 파일을 다운로드할 수 있습니다.');
       } else {
         const ver0 = {
+          userId: user?.uid || '',
           versionId: "ver_0",
           versionName: "버전 0 (최초 감지 원본)",
           originalSubtitles: JSON.parse(JSON.stringify(detectedOriginalSubtitles)),

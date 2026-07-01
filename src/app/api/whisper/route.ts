@@ -27,15 +27,16 @@ export async function POST(req: Request) {
       file: file,
       model: 'whisper-1',
       response_format: 'verbose_json',
-      timestamp_granularities: ['segment'],
+      timestamp_granularities: ['segment', 'word'],
       // 원본 음성에 외국어가 포함된 경우 해당 언어(알파벳, 한자 등)로 그대로 출력하도록 유도하는 프롬프트
       prompt: '안녕하세요. Hello. こんにちは. 你好. 음성에 포함된 모든 언어를 원본 그대로(한국어는 한글, 영어는 알파벳, 중국어는 한자 등) 번역하지 말고 전사해 주세요.',
     });
 
-    // 3. 결과 반환
+     // 3. 결과 반환
     return NextResponse.json({
       text: response.text,
       segments: response.segments,
+      words: response.words,
     });
     
   } catch (error: any) {
